@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import type { VForm } from 'vuetify/components'
-import api from '@/services/api';
-import PageLayout from '@/components/PageLayout.vue';
-import { useToast } from 'vue-toastification';
-import { useAuthStore } from '@/stores/authStore';
-import { format } from 'date-fns';
-import type { AxiosError } from 'axios';
-import ItemLookupModal from '@/components/lookup/ItemLookupModal.vue'; // Asumsi modal lookup F1
-import logoUrl from '@/assets/logo.png';
+import { ref, onMounted, computed, watch, nextTick } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import type { VForm } from "vuetify/components";
+import api from "@/services/api";
+import PageLayout from "@/components/PageLayout.vue";
+import { useToast } from "vue-toastification";
+import { useAuthStore } from "@/stores/authStore";
+import { format } from "date-fns";
+import type { AxiosError } from "axios";
+import ItemLookupModal from "@/components/lookup/ItemLookupModal.vue"; // Asumsi modal lookup F1
+import logoUrl from "@/assets/logo.png";
 
 // Store & composables
 const router = useRouter();
 const route = useRoute();
 const toast = useToast();
 const authStore = useAuthStore();
-const MENU_ID = '23';
+const MENU_ID = "23";
 
 // Interface Grid Item (sesuai Delphi GetCDS)
 interface KoreksiItem {
@@ -49,27 +49,31 @@ interface LookupResultItem {
 }
 
 type TableHeader = {
-  title: string
-  key: string
-  width?: string
-  align?: 'start' | 'center' | 'end'
-  sortable?: boolean
-}
+  title: string;
+  key: string;
+  width?: string;
+  align?: "start" | "center" | "end";
+  sortable?: boolean;
+};
 
 // Tentukan mode
 const isEditMode = computed(() => !!route.params.nomor);
-const pageTitle = computed(() => isEditMode.value ? 'Ubah Koreksi Stok' : 'Koreksi Stok Baru');
-const requiredPermission = computed(() => isEditMode.value ? 'edit' : 'insert');
-const hasViewPermission = computed(() => authStore.can(MENU_ID, 'view'));
-const canInsert = computed(() => authStore.can(MENU_ID, 'insert'));
-const canEdit = computed(() => authStore.can(MENU_ID, 'edit'));
-const canDelete = computed(() => authStore.can(MENU_ID, 'delete'));
+const pageTitle = computed(() =>
+  isEditMode.value ? "Ubah Koreksi Stok" : "Koreksi Stok Baru",
+);
+const requiredPermission = computed(() =>
+  isEditMode.value ? "edit" : "insert",
+);
+const hasViewPermission = computed(() => authStore.can(MENU_ID, "view"));
+const canInsert = computed(() => authStore.can(MENU_ID, "insert"));
+const canEdit = computed(() => authStore.can(MENU_ID, "edit"));
+const canDelete = computed(() => authStore.can(MENU_ID, "delete"));
 
 // State Header Form
 const formHeader = ref({
-  nomor: '',
-  tanggal: format(new Date(), 'yyyy-MM-dd'),
-  keterangan: '',
+  nomor: "",
+  tanggal: format(new Date(), "yyyy-MM-dd"),
+  keterangan: "",
 });
 
 // State Grid Detail
@@ -83,7 +87,7 @@ const isSaving = ref(false);
 const isLookupLoading = ref(false);
 
 // State Scan/F1
-const scanBarcode = ref(''); // Untuk input scan
+const scanBarcode = ref(""); // Untuk input scan
 const isLookupVisible = ref(false); // Modal F1
 const editingRowIndex = ref<number | null>(null);
 
@@ -93,31 +97,41 @@ const formRef = ref<VForm | null>(null);
 
 // State Konfirmasi
 const isConfirmDialogVisible = ref(false);
-const confirmText = ref('');
+const confirmText = ref("");
 const pendingAction = ref<(() => void) | null>(null);
 const confirmCancelDialogVisible = ref(false);
 
 // State Print Preview
 const isPrintPreviewVisible = ref(false);
-const printPreviewData = ref<{ header: any; details: any[]; totalNominal: number } | null>(null);
+const printPreviewData = ref<{
+  header: any;
+  details: any[];
+  totalNominal: number;
+} | null>(null);
 const isPrinting = ref(false);
 const isPrintConfirmDialogVisible = ref(false);
-const savedNomorForPrint = ref('');
+const savedNomorForPrint = ref("");
 
 // Header Tabel Detail
 const tableHeaders: TableHeader[] = [
-  { title: '#', key: 'no', sortable: false, width: '40px' },
-  { title: 'Kode Barang', key: 'kode', width: '120px' },
-  { title: 'Nama Barang', key: 'nama', width: '300px' },
-  { title: 'Size', key: 'ukuran', align: 'center', width: '80px' },
-  { title: 'Stok Awal', key: 'stok', align: 'end', width: '90px' },
-  { title: 'Jumlah Real', key: 'jumlah', align: 'end', width: '120px' },
-  { title: 'Selisih', key: 'selisih', align: 'end', width: '90px' },
-  { title: 'HPP', key: 'hpp', align: 'end', width: '100px' },
-  { title: 'Total', key: 'total', align: 'end', width: '120px' },
-  { title: 'Keterangan', key: 'keterangan', width: '150px' },
-  { title: 'Barcode', key: 'barcode', width: '130px' },
-  { title: 'Actions', key: 'actions', sortable: false, width: '50px', align: 'center' },
+  { title: "#", key: "no", sortable: false, width: "40px" },
+  { title: "Kode Barang", key: "kode", width: "120px" },
+  { title: "Nama Barang", key: "nama", width: "300px" },
+  { title: "Size", key: "ukuran", align: "center", width: "80px" },
+  { title: "Stok Awal", key: "stok", align: "end", width: "90px" },
+  { title: "Jumlah Real", key: "jumlah", align: "end", width: "120px" },
+  { title: "Selisih", key: "selisih", align: "end", width: "90px" },
+  { title: "HPP", key: "hpp", align: "end", width: "100px" },
+  { title: "Total", key: "total", align: "end", width: "120px" },
+  { title: "Keterangan", key: "keterangan", width: "150px" },
+  { title: "Barcode", key: "barcode", width: "130px" },
+  {
+    title: "Actions",
+    key: "actions",
+    sortable: false,
+    width: "50px",
+    align: "center",
+  },
 ];
 
 // --- Methods ---
@@ -125,7 +139,7 @@ const tableHeaders: TableHeader[] = [
 // Hitung Selisih, Total, dan Grand Total
 const calculateTotals = () => {
   let total = 0;
-  items.value.forEach(item => {
+  items.value.forEach((item) => {
     const stok = item.stok || 0;
     const jumlah = item.jumlah || 0;
     const hpp = item.hpp || 0;
@@ -141,12 +155,16 @@ watch(items, calculateTotals, { deep: true });
 
 // Format Angka
 const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '0';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+  if (value === null || value === undefined) return "0";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(value);
 };
 const formatNumber = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '0';
-  return new Intl.NumberFormat('id-ID').format(value);
+  if (value === null || value === undefined) return "0";
+  return new Intl.NumberFormat("id-ID").format(value);
 };
 
 // Load data jika mode Edit
@@ -163,40 +181,52 @@ const loadDataForEdit = async (nomor: string) => {
     };
     items.value = loadedItems.map((item: any) => ({
       ...item,
-      id: nextItemId.value++
+      id: nextItemId.value++,
     }));
     addEmptyRow();
     calculateTotals();
-
-  } catch (error: unknown) { /* ... error handling ... */ }
-  finally { isLoading.value = false; }
+  } catch (error: unknown) {
+    /* ... error handling ... */
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 // Fungsi Universal untuk menambah item (dari Scan atau F1)
-const processLookupResult = (itemResult: LookupResultItem, targetIndex: number) => {
+const processLookupResult = (
+  itemResult: LookupResultItem,
+  targetIndex: number,
+) => {
   // Cek duplikat di baris LAIN
-  const existingItemIndex = items.value.findIndex((i, idx) =>
-    i.kode === itemResult.kode &&
-    i.ukuran === itemResult.ukuran &&
-    idx !== targetIndex
+  const existingItemIndex = items.value.findIndex(
+    (i, idx) =>
+      i.kode === itemResult.kode &&
+      i.ukuran === itemResult.ukuran &&
+      idx !== targetIndex,
   );
 
   if (existingItemIndex > -1) {
-    toast.warning(`Barang ${itemResult.nama} (${itemResult.ukuran}) sudah ada di baris ${existingItemIndex + 1}.`);
+    toast.warning(
+      `Barang ${itemResult.nama} (${itemResult.ukuran}) sudah ada di baris ${existingItemIndex + 1}.`,
+    );
     // Jika scan, tambahkan jumlah di baris yang ada?
-    if (targetIndex === -1) { // -1 menandakan dari scan bar
-      const existingItem = items.value[existingItemIndex]
+    if (targetIndex === -1) {
+      // -1 menandakan dari scan bar
+      const existingItem = items.value[existingItemIndex];
       if (existingItem) {
-        existingItem.jumlah = (existingItem.jumlah || 0) + 1
+        existingItem.jumlah = (existingItem.jumlah || 0) + 1;
       }
-      toast.info(`Jumlah ${itemResult.nama} (${itemResult.ukuran}) ditambah 1.`);
+      toast.info(
+        `Jumlah ${itemResult.nama} (${itemResult.ukuran}) ditambah 1.`,
+      );
     }
     return false; // Gagal tambah
   }
 
   // Tentukan baris target (baris F1 atau baris kosong terakhir)
   let rowToUpdate: KoreksiItem;
-  if (targetIndex === -1) { // Dari scan bar
+  if (targetIndex === -1) {
+    // Dari scan bar
     const lastRow = items.value[items.value.length - 1];
     if (lastRow && !lastRow.kode) items.value.pop();
 
@@ -204,13 +234,16 @@ const processLookupResult = (itemResult: LookupResultItem, targetIndex: number) 
       id: nextItemId.value++,
       ...itemResult, // Ambil semua data dari lookup
       jumlah: 1, // Default 1 untuk scan
-      selisih: 0, total: 0, keterangan: ''
+      selisih: 0,
+      total: 0,
+      keterangan: "",
     };
     items.value.push(rowToUpdate);
-  } else { // Dari F1
-    const target = items.value[targetIndex]
-    if (!target) return false
-    rowToUpdate = target
+  } else {
+    // Dari F1
+    const target = items.value[targetIndex];
+    if (!target) return false;
+    rowToUpdate = target;
     // Isi data dari F1
     Object.assign(rowToUpdate, itemResult);
     rowToUpdate.jumlah = 0; // Default 0 untuk F1
@@ -244,26 +277,27 @@ const onScanBarcode = async () => {
       params: {
         barcode: barcode,
         tanggal: formHeader.value.tanggal,
-        nomor: formHeader.value.nomor // Kirim nomor koreksi saat ini (untuk cekkor)
-      }
+        nomor: formHeader.value.nomor, // Kirim nomor koreksi saat ini (untuk cekkor)
+      },
     });
 
     const itemResult = response.data as LookupResultItem;
 
-    if (processLookupResult(itemResult, -1)) { // -1 = mode scan
-      scanBarcode.value = ''; // Kosongkan scan bar
+    if (processLookupResult(itemResult, -1)) {
+      // -1 = mode scan
+      scanBarcode.value = ""; // Kosongkan scan bar
       // Fokus ke input jumlah
       await nextTick();
-      const inputs = document.querySelectorAll<HTMLInputElement>('.qty-real-input');
+      const inputs =
+        document.querySelectorAll<HTMLInputElement>(".qty-real-input");
       const lastInput = inputs[inputs.length - 2]; // -2 karena ada baris kosong
       lastInput?.focus();
       lastInput?.select();
     }
-
   } catch (error: unknown) {
     const err = error as AxiosError<{ message?: string }>;
-    toast.error(err.response?.data?.message || 'Gagal memproses barcode.');
-    scanBarcode.value = '';
+    toast.error(err.response?.data?.message || "Gagal memproses barcode.");
+    scanBarcode.value = "";
   } finally {
     isLookupLoading.value = false;
   }
@@ -275,7 +309,10 @@ const openLookup = (index: number) => {
   editingRowIndex.value = index;
   isLookupVisible.value = true;
 };
-const closeLookupModal = () => { isLookupVisible.value = false; editingRowIndex.value = null; };
+const closeLookupModal = () => {
+  isLookupVisible.value = false;
+  editingRowIndex.value = null;
+};
 const onItemSelected = async (selectedItem: LookupResultItem) => {
   if (editingRowIndex.value !== null) {
     // Langsung panggil processLookupResult dengan data lengkap dari modal
@@ -286,7 +323,7 @@ const onItemSelected = async (selectedItem: LookupResultItem) => {
 
 // Hapus item dari grid
 const removeItem = (itemToRemove: KoreksiItem) => {
-  items.value = items.value.filter(item => item.id !== itemToRemove.id);
+  items.value = items.value.filter((item) => item.id !== itemToRemove.id);
   if (items.value.length === 0) {
     addEmptyRow();
   }
@@ -296,8 +333,15 @@ const removeItem = (itemToRemove: KoreksiItem) => {
 const addEmptyRow = () => {
   items.value.push({
     id: nextItemId.value++,
-    kode: '', barcode: '', nama: '', ukuran: '',
-    stok: null, jumlah: null, selisih: 0, hpp: null, total: 0,
+    kode: "",
+    barcode: "",
+    nama: "",
+    ukuran: "",
+    stok: null,
+    jumlah: null,
+    selisih: 0,
+    hpp: null,
+    total: 0,
     keterangan: null,
   });
 };
@@ -306,11 +350,13 @@ const addEmptyRow = () => {
 const save = () => {
   // Validasi (btnSimpanClick Delphi)
   if (!formHeader.value.keterangan?.trim()) {
-    return toast.error('Keterangan harus diisi.');
+    return toast.error("Keterangan harus diisi.");
   }
-  const validItems = items.value.filter(item => item.kode && item.selisih !== 0);
+  const validItems = items.value.filter(
+    (item) => item.kode && item.selisih !== 0,
+  );
   if (validItems.length === 0) {
-    return toast.error('Detail barang harus diisi dan minimal ada 1 selisih.');
+    return toast.error("Detail barang harus diisi dan minimal ada 1 selisih.");
   }
 
   showConfirmation(executeSave, "Yakin ingin simpan data koreksi stok ini?");
@@ -321,20 +367,19 @@ const executeSave = async () => {
   try {
     const payload = {
       header: formHeader.value,
-      items: items.value.filter(item => item.kode), // Kirim semua yg ada kodenya
+      items: items.value.filter((item) => item.kode), // Kirim semua yg ada kodenya
       isNew: !isEditMode.value,
     };
 
-    const response = await api.post('/koreksi-stok/save', payload);
+    const response = await api.post("/koreksi-stok/save", payload);
     toast.success(response.data.message);
 
     savedNomorForPrint.value = response.data.nomor; // 1. Simpan nomor untuk dialog cetak
     isConfirmDialogVisible.value = false; // 2. Tutup dialog "Yakin Simpan?"
     isPrintConfirmDialogVisible.value = true; // 3. BUKA dialog "Ingin Cetak?"
-
   } catch (err) {
     const error = err as AxiosError<{ message?: string }>;
-    toast.error(error.response?.data?.message || 'Gagal menyimpan data.');
+    toast.error(error.response?.data?.message || "Gagal menyimpan data.");
     isSaving.value = false;
     closeConfirmDialog();
   }
@@ -352,7 +397,7 @@ const onPrintConfirmYes = () => {
 // Dipanggil saat klik "Tidak (Tutup)"
 const onPrintConfirmNo = () => {
   isPrintConfirmDialogVisible.value = false;
-  router.push('/transaksi/koreksi-stok'); // Langsung kembali ke browse
+  router.push("/transaksi/koreksi-stok"); // Langsung kembali ke browse
 };
 
 // Reset form (Batal)
@@ -363,9 +408,9 @@ const resetForm = () => {
   } else {
     // Sesuai refreshdata Delphi
     formHeader.value = {
-      nomor: '',
-      tanggal: format(new Date(), 'yyyy-MM-dd'),
-      keterangan: '',
+      nomor: "",
+      tanggal: format(new Date(), "yyyy-MM-dd"),
+      keterangan: "",
     };
     items.value = [];
     addEmptyRow();
@@ -391,7 +436,9 @@ const closeConfirmDialog = () => {
   isConfirmDialogVisible.value = false;
   pendingAction.value = null;
 };
-const closeForm = () => { router.push('/transaksi/koreksi-stok'); };
+const closeForm = () => {
+  router.push("/transaksi/koreksi-stok");
+};
 const executeCancel = () => {
   dialogVisible.value = false;
   confirmCancelDialogVisible.value = false;
@@ -408,7 +455,7 @@ const handlePrint = async (nomor: string) => {
     printPreviewData.value = response.data; // { header, details, totalNominal }
     isPrintPreviewVisible.value = true; // Tampilkan dialog preview
   } catch (error) {
-    toast.error('Gagal mengambil data cetak.');
+    toast.error("Gagal mengambil data cetak.");
   } finally {
     isPrinting.value = false;
     isSaving.value = false; // Matikan loading simpan SEKARANG
@@ -418,34 +465,34 @@ const handlePrint = async (nomor: string) => {
 
 const closePreviewAndNavigate = () => {
   isPrintPreviewVisible.value = false;
-  router.push('/transaksi/koreksi-stok'); // Kembali ke browse
+  router.push("/transaksi/koreksi-stok"); // Kembali ke browse
 };
 
 const triggerBrowserPrint = async () => {
   // optional: tunggu nextTick kalau dialog dibuka baru saja
   await nextTick();
 
-  const printContent = document.querySelector('#print-area .print-layout');
+  const printContent = document.querySelector("#print-area .print-layout");
   if (!printContent) {
-    console.error('Area cetak tidak ditemukan.');
-    toast.error('Area cetak tidak ditemukan.');
+    console.error("Area cetak tidak ditemukan.");
+    toast.error("Area cetak tidak ditemukan.");
     return;
   }
 
-  const iframe = document.createElement('iframe');
+  const iframe = document.createElement("iframe");
   // buat iframe "invisible"
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.setAttribute("aria-hidden", "true");
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument || iframe.contentWindow?.document;
   if (!doc) {
-    toast.error('Gagal menyiapkan dokumen cetak.');
+    toast.error("Gagal menyiapkan dokumen cetak.");
     document.body.removeChild(iframe);
     return;
   }
@@ -510,8 +557,8 @@ const triggerBrowserPrint = async () => {
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
     } catch (e) {
-      console.error('Print error:', e);
-      toast.error('Gagal membuka dialog cetak.');
+      console.error("Print error:", e);
+      toast.error("Gagal membuka dialog cetak.");
     } finally {
       // hapus iframe setelah jeda supaya print dialog sempat muncul
       setTimeout(() => {
@@ -553,119 +600,237 @@ onMounted(() => {
 <template>
   <PageLayout :title="pageTitle" desktop-mode icon="mdi-clipboard-edit-outline">
     <template #header-actions>
-      <v-btn v-if="authStore.can(MENU_ID, requiredPermission)" size="small" color="primary" @click="save"
-        :loading="isSaving" :disabled="isSaving || isLoading || isLookupLoading" prepend-icon="mdi-content-save">
+      <v-btn
+        v-if="authStore.can(MENU_ID, requiredPermission)"
+        size="small"
+        color="primary"
+        @click="save"
+        :loading="isSaving"
+        :disabled="isSaving || isLoading || isLookupLoading"
+        prepend-icon="mdi-content-save"
+      >
         Simpan
       </v-btn>
-      <v-btn size="small" @click="showConfirmation(resetForm, 'Yakin ingin batalkan perubahan?')"
-        :disabled="isSaving || isLoading" prepend-icon="mdi-cancel">
+      <v-btn
+        size="small"
+        @click="showConfirmation(resetForm, 'Yakin ingin batalkan perubahan?')"
+        :disabled="isSaving || isLoading"
+        prepend-icon="mdi-cancel"
+      >
         Batal
       </v-btn>
-      <v-btn size="small" @click="showConfirmation(closeForm, 'Yakin ingin menutup form?')" :disabled="isSaving"
-        prepend-icon="mdi-close">
+      <v-btn
+        size="small"
+        @click="showConfirmation(closeForm, 'Yakin ingin menutup form?')"
+        :disabled="isSaving"
+        prepend-icon="mdi-close"
+      >
         Tutup
       </v-btn>
     </template>
 
-    <div class="form-grid-container">
-      <!-- Left Column (Header) -->
-      <div class="left-column">
-        <div class="desktop-form-section header-section">
+    <div class="form-grid-container bg-grey-lighten-3">
+      <aside class="left-column">
+        <div class="desktop-form-section elevation-1 mb-3">
           <v-row dense>
-            <!-- Nomor -->
             <v-col cols="12">
-              <v-text-field label="No. Koreksi" v-model="formHeader.nomor" readonly filled density="compact"
-                hide-details>
+              <v-text-field
+                label="No. Koreksi"
+                v-model="formHeader.nomor"
+                readonly
+                variant="filled"
+                density="compact"
+                hide-details
+              >
                 <template #append-inner>
-                  <span v-if="!isEditMode && !formHeader.nomor"
-                    class="text-caption text-disabled">&lt;Otomatis&gt;</span>
+                  <span
+                    v-if="!isEditMode && !formHeader.nomor"
+                    class="text-caption text-disabled"
+                    >&lt;Otomatis&gt;</span
+                  >
                 </template>
               </v-text-field>
             </v-col>
-            <!-- Tanggal -->
             <v-col cols="12">
-              <v-text-field label="Tanggal" v-model="formHeader.tanggal" type="date" variant="outlined"
-                density="compact" hide-details />
+              <v-text-field
+                label="Tanggal"
+                v-model="formHeader.tanggal"
+                type="date"
+                variant="outlined"
+                density="compact"
+                hide-details
+              />
             </v-col>
-            <!-- Note -->
             <v-col cols="12">
-              <v-alert density="compact" type="info" variant="tonal" class="text-caption py-2"
-                style="line-height: 1.3;">
-                Note: Jumlah koreksi adalah Jumlah stok awal fisik pada tanggal koreksi tsb.
+              <v-alert
+                density="compact"
+                type="info"
+                variant="tonal"
+                class="text-caption py-2 mb-0"
+                style="line-height: 1.2"
+              >
+                Note: Input Jumlah Real adalah stok fisik akhir di rak saat ini.
               </v-alert>
             </v-col>
-            <!-- Keterangan (Wajib) -->
             <v-col cols="12">
-              <v-textarea label="Keterangan *" v-model="formHeader.keterangan" variant="outlined" rows="3"
-                density="compact" hide-details />
+              <v-textarea
+                label="Keterangan *"
+                v-model="formHeader.keterangan"
+                variant="outlined"
+                rows="2"
+                density="compact"
+                hide-details
+              />
             </v-col>
           </v-row>
         </div>
 
-        <!-- Kolom Kiri Bawah (Scan & Total) -->
-        <div class="desktop-form-section">
-          <v-text-field label="Scan Barcode / F1 Cari Kode" v-model="scanBarcode" variant="outlined" density="compact"
-            prepend-inner-icon="mdi-magnify" append-inner-icon="mdi-barcode-scan" @keyup.enter="onScanBarcode"
-            :loading="isLookupLoading" :disabled="isLookupLoading" placeholder="Enter untuk menambah" clearable
-            hide-details class="mb-3" />
-          <v-text-field label="Total Nominal Koreksi" :model-value="formatCurrency(grandTotal)" readonly filled
-            density="compact" hide-details class="text-h6 font-weight-bold"
-            :class="grandTotal > 0 ? 'text-success' : grandTotal < 0 ? 'text-error' : ''" />
-        </div>
-      </div>
+        <div class="desktop-form-section elevation-1 border-left-blue">
+          <v-text-field
+            label="Scan Barcode / F1 Cari"
+            v-model="scanBarcode"
+            variant="outlined"
+            density="compact"
+            prepend-inner-icon="mdi-magnify"
+            append-inner-icon="mdi-barcode-scan"
+            @keyup.enter="onScanBarcode"
+            :loading="isLookupLoading"
+            color="primary"
+            placeholder="Enter untuk menambah"
+            clearable
+            hide-details
+            class="mb-3"
+          />
 
-      <!-- Right Column (Grid Detail) -->
-      <div class="right-column">
-        <div class="desktop-form-section d-flex flex-column fill-height">
-          <v-data-table :headers="tableHeaders" :items="items" :loading="isLoading" density="compact"
-            class="desktop-table fill-height-table" fixed-header :items-per-page="-1"
-            no-data-text="Scan barcode atau F1 untuk menambah item.">
-            <!-- Kolom Nomor Urut -->
+          <v-text-field
+            label="Total Nominal Koreksi"
+            :model-value="formatCurrency(grandTotal)"
+            readonly
+            variant="filled"
+            density="compact"
+            hide-details
+            :class="[
+              'total-field-highlight',
+              grandTotal > 0
+                ? 'text-success'
+                : grandTotal < 0
+                  ? 'text-error'
+                  : '',
+            ]"
+          />
+        </div>
+      </aside>
+
+      <main class="right-column">
+        <div
+          class="desktop-form-section d-flex flex-column fill-height elevation-1 pa-0 overflow-hidden"
+        >
+          <v-data-table
+            :headers="tableHeaders"
+            :items="items"
+            :loading="isLoading"
+            density="compact"
+            class="desktop-table fill-height-table colored-header"
+            fixed-header
+            :items-per-page="-1"
+          >
             <template #[`item.no`]="{ index }"> {{ index + 1 }} </template>
 
-            <!-- Kolom Kode (F1) -->
             <template #[`item.kode`]="{ item, index }">
-              <v-text-field :model-value="item.kode" variant="underlined" density="compact" hide-details
-                @keydown.f1.prevent="openLookup(index)" placeholder="F1 = Cari" readonly
-                @click="!item.kode && openLookup(index)" style="cursor: pointer;" />
+              <v-text-field
+                :model-value="item.kode"
+                variant="plain"
+                density="compact"
+                hide-details
+                placeholder="F1 = Cari"
+                readonly
+                @click="!item.kode && openLookup(index)"
+                class="cursor-pointer font-weight-bold"
+              />
             </template>
 
-            <!-- Kolom Readonly (Stok, Selisih, Hpp, Total, Barcode) -->
-            <template #[`item.stok`]="{ value }">{{ formatNumber(value) }}</template>
+            <template #[`item.stok`]="{ value }">{{
+              formatNumber(value)
+            }}</template>
             <template #[`item.selisih`]="{ value }">
-              <span :class="value > 0 ? 'text-success' : value < 0 ? 'text-error' : ''">{{ formatNumber(value) }}</span>
+              <span
+                :class="
+                  value > 0 ? 'text-success' : value < 0 ? 'text-error' : ''
+                "
+                class="font-weight-bold"
+              >
+                {{ formatNumber(value) }}
+              </span>
             </template>
-            <template #[`item.hpp`]="{ value }">{{ formatCurrency(value) }}</template>
+            <template #[`item.hpp`]="{ value }">{{
+              formatCurrency(value)
+            }}</template>
             <template #[`item.total`]="{ value }">
-              <span class="font-weight-bold" :class="value > 0 ? 'text-success' : value < 0 ? 'text-error' : ''">{{
-                formatCurrency(value) }}</span>
+              <span
+                class="font-weight-bold"
+                :class="
+                  value > 0 ? 'text-success' : value < 0 ? 'text-error' : ''
+                "
+              >
+                {{ formatCurrency(value) }}
+              </span>
             </template>
-            <template #[`item.barcode`]="{ value }">{{ value }}</template>
 
-            <!-- Kolom Jumlah Real (Editable) -->
             <template #[`item.jumlah`]="{ item }">
-              <v-text-field v-model.number="item.jumlah" type="number" min="0" variant="underlined" density="compact"
-                hide-details class="text-end qty-real-input" @focus="$event.target.select()" :disabled="!item.kode" />
+              <v-text-field
+                v-model.number="item.jumlah"
+                type="number"
+                variant="underlined"
+                density="compact"
+                hide-details
+                class="text-right-input"
+                color="primary"
+                @focus="$event.target.select()"
+                :disabled="!item.kode"
+              />
             </template>
 
-            <!-- Kolom Keterangan (Editable) -->
             <template #[`item.keterangan`]="{ item }">
-              <v-text-field v-model="item.keterangan" variant="underlined" density="compact" hide-details
-                :disabled="!item.kode" />
+              <v-text-field
+                v-model="item.keterangan"
+                variant="underlined"
+                density="compact"
+                hide-details
+                :disabled="!item.kode"
+                placeholder="Catatan item..."
+              />
             </template>
 
-            <!-- Kolom Actions (Hapus Baris) -->
             <template #[`item.actions`]="{ item }">
-              <v-icon v-if="item.kode" size="small" color="error" @click="removeItem(item)" tabindex="-1">
+              <v-icon
+                v-if="item.kode"
+                size="small"
+                color="error"
+                @click="removeItem(item)"
+                tabindex="-1"
+              >
                 mdi-delete-outline
               </v-icon>
             </template>
 
-            <template v-slot:loading>...</template>
+            <template v-slot:loading>
+              <div class="text-center py-10">
+                <v-progress-circular
+                  indeterminate
+                  color="primary"
+                  size="32"
+                  width="3"
+                ></v-progress-circular>
+                <div class="mt-2 text-primary font-weight-bold">
+                  Memproses data...
+                </div>
+              </div>
+            </template>
+
             <template #bottom></template>
           </v-data-table>
         </div>
-      </div>
+      </main>
     </div>
 
     <v-dialog v-model="isConfirmDialogVisible" max-width="400px" persistent>
@@ -678,7 +843,13 @@ onMounted(() => {
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="closeConfirmDialog">Tidak</v-btn>
-          <v-btn color="primary" variant="tonal" @click="executePendingAction" :loading="isSaving">Ya, Lanjutkan</v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            @click="executePendingAction"
+            :loading="isSaving"
+            >Ya, Lanjutkan</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -705,14 +876,28 @@ onMounted(() => {
     </v-dialog>
 
     <!-- Dialog F1 Lookup -->
-    <ItemLookupModal v-model="isLookupVisible" source="koreksi-stok" :tanggal="formHeader.tanggal"
-      @item-selected="onItemSelected" @close="closeLookupModal" />
+    <ItemLookupModal
+      v-model="isLookupVisible"
+      source="koreksi-stok"
+      :tanggal="formHeader.tanggal"
+      @item-selected="onItemSelected"
+      @close="closeLookupModal"
+    />
 
     <!-- Dialog Print Preview -->
-    <v-dialog v-model="isPrintPreviewVisible" persistent max-width="90vw" max-height="90vh" scrollable>
+    <v-dialog
+      v-model="isPrintPreviewVisible"
+      persistent
+      max-width="90vw"
+      max-height="90vh"
+      scrollable
+    >
       <v-card>
         <v-toolbar color="primary" density="compact">
-          <v-toolbar-title>Cetak Koreksi Stok: {{ printPreviewData?.header?.nomor }}</v-toolbar-title>
+          <v-toolbar-title
+            >Cetak Koreksi Stok:
+            {{ printPreviewData?.header?.nomor }}</v-toolbar-title
+          >
           <v-spacer></v-spacer>
           <v-btn icon="mdi-close" @click="closePreviewAndNavigate"></v-btn>
         </v-toolbar>
@@ -721,10 +906,12 @@ onMounted(() => {
           <div v-if="printPreviewData" class="print-layout">
             <header class="print-header">
               <div class="logo-container">
-                <img :src="logoUrl" alt="Logo" class="print-logo">
+                <img :src="logoUrl" alt="Logo" class="print-logo" />
                 <div class="company-info">
-                  <strong>{{ printPreviewData.header.perusahaanNama }}</strong><br>
-                  <span>{{ printPreviewData.header.perusahaanAlamat }}</span><br>
+                  <strong>{{ printPreviewData.header.perusahaanNama }}</strong
+                  ><br />
+                  <span>{{ printPreviewData.header.perusahaanAlamat }}</span
+                  ><br />
                   <span>{{ printPreviewData.header.perusahaanTelp }}</span>
                 </div>
               </div>
@@ -772,17 +959,24 @@ onMounted(() => {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="6" class="text-end font-weight-bold">Total Nominal:</td>
-                  <td class="text-end font-weight-bold">{{ formatCurrency(printPreviewData.totalNominal) }}</td>
+                  <td colspan="6" class="text-end font-weight-bold">
+                    Total Nominal:
+                  </td>
+                  <td class="text-end font-weight-bold">
+                    {{ formatCurrency(printPreviewData.totalNominal) }}
+                  </td>
                   <td></td>
                 </tr>
               </tfoot>
             </table>
 
             <footer class="print-footer">
-              <div>Dibuat Oleh,<br><br><br>( {{ printPreviewData.header.userNama }} )</div>
-              <div>Mengetahui,<br><br><br>( .................... )</div>
-              <div>Manager,<br><br><br>( .................... )</div>
+              <div>
+                Dibuat Oleh,<br /><br /><br />(
+                {{ printPreviewData.header.userNama }} )
+              </div>
+              <div>Mengetahui,<br /><br /><br />( .................... )</div>
+              <div>Manager,<br /><br /><br />( .................... )</div>
             </footer>
           </div>
         </v-card-text>
@@ -791,14 +985,22 @@ onMounted(() => {
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="closePreviewAndNavigate">Tutup</v-btn>
-          <v-btn color="primary" @click="triggerBrowserPrint" prepend-icon="mdi-printer">
+          <v-btn
+            color="primary"
+            @click="triggerBrowserPrint"
+            prepend-icon="mdi-printer"
+          >
             Cetak via Browser
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="isPrintConfirmDialogVisible" persistent max-width="450px">
+    <v-dialog
+      v-model="isPrintConfirmDialogVisible"
+      persistent
+      max-width="450px"
+    >
       <v-card>
         <v-card-title class="text-h6 d-flex align-center">
           <v-icon color="success" class="mr-2">mdi-check-circle-outline</v-icon>
@@ -806,9 +1008,9 @@ onMounted(() => {
         </v-card-title>
         <v-card-text>
           Data berhasil disimpan dengan Nomor:
-          <br>
+          <br />
           <strong>{{ savedNomorForPrint }}</strong>
-          <br><br>
+          <br /><br />
           Ingin Cetak transaksi?
         </v-card-text>
         <v-card-actions>
@@ -822,41 +1024,75 @@ onMounted(() => {
         </v-card-actions>
       </v-card>
     </v-dialog>
-
   </PageLayout>
 </template>
 
 <style scoped>
-/* Styles untuk layout grid, left/right column */
-.form-grid-container {
-  padding: 12px;
-  height: calc(100vh - 120px);
-  display: grid;
-  grid-template-columns: 350px 1fr;
-  gap: 12px;
+/* 1. Global Font 11px untuk seluruh area kerja */
+.form-grid-container :deep(*) {
+  font-size: 11px !important;
 }
 
+/* 2. Layout Grid Dasar */
+.form-grid-container {
+  padding: 12px;
+  height: calc(100vh - 100px);
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 16px;
+}
+
+/* 3. Overlay Section Styling (White over Gray) */
+.desktop-form-section {
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: white !important;
+}
+
+/* Aksen Garis Biru */
+.border-left-blue {
+  border-left: 4px solid #1976d2 !important;
+}
+
+/* 4. Konsistensi Biru (Tabel Header) */
+.colored-header :deep(thead th) {
+  background-color: #1976d2 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
+  height: 36px !important;
+}
+
+/* 5. Custom Input Grid */
+.text-right-input :deep(input) {
+  text-align: right;
+  font-weight: bold;
+}
+
+/* Highlight Field Total */
+.total-field-highlight :deep(input) {
+  font-weight: 900 !important;
+  font-size: 15px !important; /* Total lebih besar agar kontras */
+}
+
+/* Hilangkan Spinner Angka */
+:deep(input::-webkit-outer-spin-button),
+:deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Logic Layouting & Scrolling */
 .left-column,
 .right-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-height: 0;
 }
 
 .right-column {
   flex-grow: 1;
-}
-
-.desktop-form-section {
-  padding: 12px;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  background-color: white;
-}
-
-.header-section {
-  flex-shrink: 0;
 }
 
 .desktop-table {
@@ -868,21 +1104,8 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-.v-data-table :deep(input[type='number']) {
-  text-align: right;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.v-data-table :deep(input[type=number]::-webkit-inner-spin-button),
-.v-data-table :deep(input[type=number]::-webkit-outer-spin-button) {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.v-data-table :deep(.v-field--variant-underlined .v-field__input) {
-  padding-top: 0;
-  padding-bottom: 2px;
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>
 
@@ -902,7 +1125,7 @@ onMounted(() => {
 }
 
 .print-layout {
-  font-family: 'Arial', sans-serif;
+  font-family: "Arial", sans-serif;
   font-size: 9pt;
   /* Ukuran font umum */
   width: 210mm;
@@ -1054,14 +1277,14 @@ onMounted(() => {
   /* Ukuran font tanda tangan */
 }
 
-.print-footer>div {
+.print-footer > div {
   text-align: center;
   width: 30%;
   /* Beri lebar agar terdistribusi */
   line-height: 1.2;
 }
 
-.print-footer>div:not(:last-child) {
+.print-footer > div:not(:last-child) {
   margin-right: 10px;
   /* Kurangi jarak antar kolom ttd */
 }
@@ -1101,7 +1324,7 @@ onMounted(() => {
   /* Penting: Set margin ke 0 */
 
   /* Reset background dan shadow untuk cetak */
-  #print-area-browse>.print-layout {
+  #print-area-browse > .print-layout {
     box-shadow: none;
     border: none;
     padding: 15mm;
