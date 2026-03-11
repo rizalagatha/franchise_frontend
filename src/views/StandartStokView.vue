@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
 import { useToast } from 'vue-toastification';
@@ -22,11 +21,20 @@ interface StandartStok {
   Stok: number;
 }
 
+type TableHeader = {
+  title: string
+  key: keyof StandartStok | string
+  align?: 'start' | 'center' | 'end'
+  width?: string
+  minWidth?: string
+}
+
 // --- State ---
 const items = ref<StandartStok[]>([]);
 const isLoading = ref(true);
 const search = ref('');
 const selected = ref<StandartStok[]>([]);
+const maxField = ref();
 
 // State Edit (PanelPSM di Delphi)
 const isEditDialogOpen = ref(false);
@@ -45,7 +53,7 @@ const canEdit = computed(() => authStore.can(MENU_ID, 'edit'));
 const isSingleSelected = computed(() => selected.value.length === 1);
 
 // Header Tabel (Sesuai Delphi)
-const headers: VDataTableHeaders = [
+const headers: TableHeader[] = [
   { title: 'Barcode', key: 'Barcode', width: '150px' },
   { title: 'Nama Barang', key: 'Nama', minWidth: '300px' },
   { title: 'Ukuran', key: 'Ukuran', align: 'center', width: '100px' },
@@ -194,7 +202,7 @@ onMounted(() => {
             <v-row dense>
               <v-col cols="12">
                 <v-text-field v-model.number="editForm.minBuffer" label="Minimal Buffer" type="number" density="compact"
-                  variant="outlined" hide-details class="mb-3" @keyup.enter="$refs.maxField.focus()"></v-text-field>
+                  variant="outlined" hide-details class="mb-3" @keyup.enter="maxField?.focus()"></v-text-field>
               </v-col>
               <v-col cols="12">
                 <v-text-field ref="maxField" v-model.number="editForm.maxBuffer" label="Maximal Buffer" type="number"

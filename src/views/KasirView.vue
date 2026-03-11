@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components';
 import { format, subDays } from 'date-fns';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
@@ -53,13 +52,23 @@ interface InvoiceDetail {
   Total: number;
 }
 
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  minWidth?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
+  fixed?: boolean
+}
+
 // --- State ---
 const headersData = ref<InvoiceHeader[]>([]);
 const detailsData = ref<Record<string, InvoiceDetail[]>>({});
 const selected = ref<InvoiceHeader[]>([]);
 const isLoadingHeaders = ref(true);
 const loadingDetails = ref<Set<string>>(new Set());
-const expanded = ref<InvoiceHeader[]>([]);
+const expanded = ref<string[]>([])
 const search = ref('');
 const isPrintOptionVisible = ref(false);
 const isKasirPreviewVisible = ref(false);
@@ -82,16 +91,16 @@ const formatCurrency = (value: any) => formatRupiah(value);
 const formatNumber = (value: number) => new Intl.NumberFormat('id-ID').format(value);
 
 // Table Headers
-const masterHeaders: VDataTableHeaders = [
+const masterHeaders: TableHeader[] = [
   { title: 'Nomor', key: 'Nomor', width: '150px', fixed: true },
   { title: 'Tanggal', key: 'Tanggal', width: '110px' },
-  { title: 'Kd Cus', key: 'Kdcus', width: '100px' },
+  { title: 'Kd Cus', key: 'KdCus', width: '100px' },
   { title: 'Customer', key: 'Nama', minWidth: '200px' },
   { title: 'Alamat', key: 'Alamat', minWidth: '250px' },
   { title: 'Kota', key: 'Kota', width: '120px' },
   { title: 'Telp', key: 'Telp', width: '120px' },
   { title: 'Diskon', key: 'Diskon', align: 'end', width: '110px' },
-  { title: 'Biaya Kirim', key: 'Biayakirim', align: 'end', width: '110px' },
+  { title: 'Biaya Kirim', key: 'BiayaKirim', align: 'end', width: '110px' },
   { title: 'Nominal', key: 'Nominal', align: 'end', width: '130px' },
   { title: 'Piutang', key: 'Piutang', align: 'end', width: '130px' },
   { title: 'Bayar', key: 'Bayar', align: 'end', width: '130px' },
@@ -101,12 +110,12 @@ const masterHeaders: VDataTableHeaders = [
   { title: 'No Setoran', key: 'NoSetoran', width: '150px' },
   { title: 'No Rekening', key: 'NoRekening', width: '150px' },
   { title: 'Bank', key: 'NamaBank', width: '120px' },
-  { title: 'User Create', key: 'UserCreate', width: '120px' },
-  { title: 'Date Create', key: 'DateCreate', width: '150px' },
+  { title: 'User Create', key: 'Created', width: '120px' },
+  { title: 'Date Create', key: 'Date_Create', width: '150px' },
   { title: '', key: 'data-table-expand', width: '40px', align: 'end' },
 ];
 
-const detailHeaders: VDataTableHeaders = [
+const detailHeaders: TableHeader[] = [
   { title: 'Kode', key: 'Kode', width: '120px' },
   { title: 'Nama Barang', key: 'Nama', minWidth: '250px' },
   { title: 'Ukuran', key: 'Ukuran', align: 'center', width: '80px' },
@@ -114,6 +123,23 @@ const detailHeaders: VDataTableHeaders = [
   { title: 'Harga', key: 'Harga', align: 'end', width: '110px' },
   { title: 'Total', key: 'Total', align: 'end', width: '120px' },
 ];
+
+// Data yang terfilter (agar Grand Total sinkron dengan kolom pencarian)
+const filteredData = computed(() => {
+  if (!search.value) return headersData.value;
+  const s = search.value.toLowerCase();
+  return headersData.value.filter(item =>
+    item.Nomor.toLowerCase().includes(s) ||
+    item.Nama.toLowerCase().includes(s) ||
+    item.Kdcus.toLowerCase().includes(s)
+  );
+});
+
+const getTotal = (key: keyof InvoiceHeader) => {
+  return filteredData.value.reduce((acc, item) => {
+    return acc + (Number(item[key]) || 0);
+  }, 0);
+};
 
 // --- Methods ---
 
@@ -207,13 +233,14 @@ const loadDetails = async (newlyExpanded: any[]) => {
 // Navigasi & Action
 const openNewForm = () => router.push({ name: 'KasirBaru' });
 const openEditForm = () => {
-  if (selected.value.length > 0) {
-    router.push({
-      name: 'KasirUbah',
-      params: { nomor: selected.value[0].Nomor }
-    });
-  }
-};
+  const item = selected.value[0]
+  if (!item) return
+
+  router.push({
+    name: 'KasirUbah',
+    params: { nomor: item.Nomor }
+  })
+}
 
 const exportHeader = () => {
   const worksheet = XLSX.utils.json_to_sheet(headersData.value);
@@ -234,7 +261,7 @@ onMounted(() => { if (hasViewPermission.value) fetchHeadersData(); });
       <v-btn v-if="canDelete" size="small" color="error" :disabled="!isSingleSelected"
         prepend-icon="mdi-delete">Hapus</v-btn>
       <v-btn v-if="hasViewPermission" size="small" color="green" :disabled="!isSingleSelected"
-        prepend-icon="mdi-printer" @click="openPrintOptions(selected[0]?.Nomor)">
+        prepend-icon="mdi-printer" @click="() => { const n = selected[0]?.Nomor; if (n) openPrintOptions(n) }">
         Cetak
       </v-btn>
       <v-menu offset-y>
@@ -263,12 +290,12 @@ onMounted(() => { if (hasViewPermission.value) fetchHeadersData(); });
           :search="search" :loading="isLoadingHeaders" :row-props="getRowProps" item-value="Nomor" show-select
           show-expand return-object select-strategy="single" density="compact" fixed-header
           class="desktop-table fill-height-table" @update:expanded="loadDetails"
-          :item-props="(item) => ({ class: getRowTextColor(item) })">
+          :item-props="(item: InvoiceHeader) => ({ class: getRowTextColor(item) })">
           <template #[`item.Tanggal`]="{ value }">
             {{ value ? format(new Date(value), 'dd/MM/yyyy') : '-' }}
           </template>
 
-          <template #[`item.DateCreate`]="{ value }">
+          <template #[`item.Date_Create`]="{ value }">
             {{ value ? format(new Date(value), 'dd/MM/yyyy HH:mm') : '-' }}
           </template>
 
@@ -300,6 +327,21 @@ onMounted(() => { if (hasViewPermission.value) fetchHeadersData(); });
                 </div>
               </td>
             </tr>
+          </template>
+
+          <template #tfoot v-if="headersData.length > 0">
+            <tfoot>
+              <tr class="bg-grey-lighten-3 font-weight-bold text-primary">
+                <td colspan="10" class="text-right">GRAND TOTAL</td>
+                <td class="text-right">{{ formatCurrency(getTotal('Nominal')) }}</td>
+                <td class="text-right">{{ formatCurrency(getTotal('Piutang')) }}</td>
+                <td class="text-right">{{ formatCurrency(getTotal('Bayar')) }}</td>
+                <td class="text-right">{{ formatCurrency(getTotal('SisaPiutang')) }}</td>
+                <td class="text-right">{{ formatCurrency(getTotal('RpTunai')) }}</td>
+                <td class="text-right">{{ formatCurrency(getTotal('RpCard')) }}</td>
+                <td colspan="5"></td>
+              </tr>
+            </tfoot>
           </template>
         </v-data-table>
       </div>

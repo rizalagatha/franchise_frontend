@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components'; // Import type
 import type { VForm } from 'vuetify/components';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue'; // Gunakan PageLayout
@@ -48,6 +47,14 @@ interface CustomerFormData {
   // NPWP tidak ada di Delphi Franchise
 }
 
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
+}
+
 // --- State ---
 const customers = ref<Customer[]>([]);
 const search = ref('');
@@ -72,7 +79,7 @@ const canEdit = computed(() => authStore.can(MENU_ID, 'edit'));
 const canInsert = computed(() => authStore.can(MENU_ID, 'insert'));
 
 // Konfigurasi header tabel (sesuai Delphi)
-const headers: VDataTableHeaders = [
+const headers: TableHeader[] = [
   { title: 'Kode', key: 'Kode', width: '120px' },
   { title: 'Nama', key: 'Nama', width: '250px' }, // Width disesuaikan
   { title: 'Alamat', key: 'Alamat', width: '200px' },
@@ -268,6 +275,16 @@ const getRowProps = ({ item }: { item: Customer }) => {
   return {};
 };
 
+const handleRowClick = (event: PointerEvent, { item }: { item: Customer }) => {
+  // Jika baris yang sama diklik lagi, batalkan pilihan (toggle)
+  if (selected.value.length > 0 && selected.value[0].Kode === item.Kode) {
+    selected.value = [];
+  } else {
+    // Pilih baris yang diklik
+    selected.value = [item];
+  }
+};
+
 // Fungsi yang dipanggil saat tombol "Ya, Simpan" diklik
 const executePendingSave = async () => {
   if (pendingSaveAction.value) {
@@ -323,8 +340,8 @@ onMounted(() => {
 
       <!-- Table Section -->
       <v-data-table v-model="selected" :headers="headers" :items="customers" :search="search" :loading="isLoading"
-        item-value="Kode" density="compact" class="desktop-table fill-height-table" fixed-header show-select
-        return-object :row-props="getRowProps">
+        item-value="Kode" density="compact" class="desktop-table fill-height-table colored-header" fixed-header
+        show-select select-strategy="single" return-object :row-props="getRowProps" @click:row="handleRowClick">
         <!-- Customisasi kolom 'Aktif' -->
         <template #[`item.Aktif`]="{ item }">
           <v-chip :color="item.Aktif === 'Y' ? 'success' : 'error'" size="x-small" variant="tonal"
@@ -487,7 +504,34 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Styling untuk baris yang tidak aktif (merah) */
+/* Warna Header Tabel */
+.colored-header :deep(thead th) {
+  background-color: #1976D2 !important;
+  /* Biru Primary */
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+/* Warna Checkbox di Header agar putih */
+.colored-header :deep(thead .v-checkbox-btn .v-selection-control__wrapper) {
+  color: white !important;
+}
+
+/* Highlight Baris yang dipilih */
+.desktop-table :deep(tr.v-data-table__selected) {
+  background-color: #E3F2FD !important;
+  /* Biru muda saat dipilih */
+}
+
+/* Efek Hover */
+.desktop-table :deep(tbody tr:hover) {
+  cursor: pointer;
+  background-color: #f5f5f5 !important;
+}
+
+/* Styling existing: inactive-row */
 .inactive-row {
   color: red !important;
 }

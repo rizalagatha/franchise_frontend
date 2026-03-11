@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import type { VDataTableHeaders, VForm } from 'vuetify/components';
+import type { VForm } from 'vuetify/components';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
 import { useToast } from 'vue-toastification';
@@ -30,6 +30,14 @@ interface UpdatePriceData {
   Ukuran: string;
   Hpp: number | null;
   Harga: number | null;
+}
+
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
 }
 
 // --- State ---
@@ -72,7 +80,7 @@ const formatCurrency = (value: number | null | undefined): string => {
 };
 
 // Header tabel (sesuai Delphi + Laba)
-const headers: VDataTableHeaders = [
+const headers: TableHeader[] = [
   { title: 'Kode', key: 'Kode', width: '120px' },
   { title: 'Barcode', key: 'Barcode', width: '130px' },
   { title: 'Nama Barang', key: 'Nama', width: '300px' },
@@ -83,7 +91,7 @@ const headers: VDataTableHeaders = [
   // Kolom Actions (Update Harga & History)
   { title: 'Actions', key: 'actions', sortable: false, width: '100px', align: 'center' }
 ];
-const historyHeaders: VDataTableHeaders = [
+const historyHeaders: TableHeader[] = [
   { title: 'Tanggal Update', key: 'Tanggal', width: '180px' },
   // { title: 'Kode', key: 'Kode' }, // Mungkin tidak perlu ditampilkan lagi
   // { title: 'Ukuran', key: 'Ukuran' }, // Mungkin tidak perlu ditampilkan lagi
@@ -118,12 +126,13 @@ const openUpdateDialog = (item: ProductPrice) => {
     toast.error("Anda tidak punya hak akses untuk mengubah harga.");
     return;
   }
-  editedItem.value = { // Siapkan data untuk dialog
+  editedItem.value = {
     Kode: item.Kode,
     Nama: item.Nama,
     Ukuran: item.Ukuran,
-    Hpp: item.Hpp,
-    Harga: item.Harga,
+    // Bulatkan angka agar tidak muncul banyak desimal (seperti di screenshot)
+    Hpp: Math.round(Number(item.Hpp) || 0),
+    Harga: Math.round(Number(item.Harga) || 0),
   };
   dialogUpdateVisible.value = true;
   formRef.value?.resetValidation();
@@ -174,11 +183,16 @@ const savePrice = async () => {
       // Update data di tabel lokal
       const index = products.value.findIndex(p => p.Kode === itemToSave.Kode && p.Ukuran === itemToSave.Ukuran);
       if (index !== -1) {
-        products.value[index].Hpp = itemToSave.Hpp ?? null;
-        products.value[index].Harga = itemToSave.Harga ?? null;
-        const hppVal = itemToSave.Hpp ?? 0;
-        const hargaVal = itemToSave.Harga ?? 0;
-        products.value[index].Laba = hargaVal - hppVal;
+        const product = products.value[index]
+        if (!product) return
+
+        product.Hpp = itemToSave.Hpp ?? null
+        product.Harga = itemToSave.Harga ?? null
+
+        const hppVal = itemToSave.Hpp ?? 0
+        const hargaVal = itemToSave.Harga ?? 0
+
+        product.Laba = hargaVal - hppVal
       }
 
       dialogUpdateVisible.value = false; // Tutup dialog update utama
@@ -272,6 +286,15 @@ const closeHistoryDialog = () => {
   historyData.value = [];             // Kosongkan data
 };
 
+const handleRowClick = (event: PointerEvent, { item }: { item: ProductPrice }) => {
+  // Toggle selection: jika sudah dipilih maka lepas, jika belum maka pilih
+  if (selected.value.length > 0 && selected.value[0].Barcode === item.Barcode) {
+    selected.value = [];
+  } else {
+    selected.value = [item];
+  }
+};
+
 // Ambil data saat komponen dimuat
 onMounted(() => {
   if (hasViewPermission.value) {
@@ -289,8 +312,8 @@ onMounted(() => {
     <!-- Tombol Header -->
     <template #header-actions>
       <!-- Tombol Update Harga -->
-      <v-btn v-if="canEdit" size="small" :disabled="!canUpdateFromHeader" @click="openUpdateDialog(selected[0])"
-        prepend-icon="mdi-pencil">
+      <v-btn v-if="canEdit" size="small" :disabled="!canUpdateFromHeader"
+        @click="selected[0] && openUpdateDialog(selected[0])" prepend-icon="mdi-pencil">
         Update Harga
       </v-btn>
       <!-- Tombol Export -->
@@ -312,8 +335,8 @@ onMounted(() => {
 
       <!-- Table Section -->
       <v-data-table v-model="selected" :headers="headers" :items="products" :search="search" :loading="isLoading"
-        item-value="Barcode" density="compact" class="desktop-table fill-height-table" fixed-header show-select
-        return-object items-per-page="50">
+        item-value="Barcode" density="compact" class="desktop-table fill-height-table colored-header" fixed-header
+        show-select select-strategy="single" return-object items-per-page="50" @click:row="handleRowClick">
         <!-- Formatting Kolom Angka -->
         <template #[`item.Hpp`]="{ value }">
           {{ formatCurrency(value) }}
@@ -364,55 +387,58 @@ onMounted(() => {
     </div>
 
     <!-- === DIALOG UPDATE HARGA === -->
-    <v-dialog v-model="dialogUpdateVisible" persistent max-width="500px">
-      <v-card class="dialog-card">
+    <v-dialog v-model="dialogUpdateVisible" persistent max-width="480px">
+      <v-card class="dialog-card rounded-lg">
         <v-form ref="formRef" @submit.prevent="savePrice">
-          <v-card-title class="dialog-header">
-            <span class="text-subtitle-1 font-weight-medium">Update Harga Jual</span>
+          <v-card-title class="dialog-header bg-primary text-white pa-4">
+            <v-icon color="white" class="mr-2">mdi-tag-edit</v-icon>
+            <span class="text-h6 font-weight-bold">Update Harga Jual</span>
             <v-spacer></v-spacer>
-            <v-btn icon="mdi-close" variant="text" size="small" @click="closeUpdateDialog"></v-btn>
+            <v-btn icon="mdi-close" variant="text" color="white" size="small" @click="closeUpdateDialog"></v-btn>
           </v-card-title>
 
-          <v-card-text class="pa-4">
-            <v-container>
+          <v-card-text class="pa-4 bg-grey-lighten-4">
+            <div class="bg-white pa-3 rounded border mb-4">
+              <div class="text-caption text-grey-darken-1 font-weight-bold mb-2">IDENTITAS BARANG</div>
               <v-row dense>
-                <!-- Info Barang (Readonly) -->
                 <v-col cols="12">
-                  <v-text-field :model-value="editedItem.Kode" label="Kode Barang" variant="filled" density="compact"
-                    readonly hide-details></v-text-field>
+                  <v-text-field :model-value="editedItem.Kode" label="Kode" variant="filled" density="compact" readonly
+                    hide-details class="mb-2" />
                 </v-col>
                 <v-col cols="12">
                   <v-text-field :model-value="editedItem.Nama" label="Nama Barang" variant="filled" density="compact"
-                    readonly hide-details></v-text-field>
+                    readonly hide-details class="mb-2" />
                 </v-col>
                 <v-col cols="12">
                   <v-text-field :model-value="editedItem.Ukuran" label="Ukuran" variant="filled" density="compact"
-                    readonly hide-details></v-text-field>
-                </v-col>
-
-                <v-divider class="my-3"></v-divider>
-
-                <!-- Input HPP -->
-                <v-col cols="12">
-                  <v-text-field v-model.number="editedItem.Hpp" label="HPP Baru *" type="number" prefix="Rp"
-                    variant="outlined" density="compact" :rules="[numberRule, nonNegativeRule]" hide-details="auto"
-                    autofocus></v-text-field>
-                </v-col>
-
-                <!-- Input Harga Jual -->
-                <v-col cols="12">
-                  <v-text-field v-model.number="editedItem.Harga" label="Harga Jual Baru *" type="number" prefix="Rp"
-                    variant="outlined" density="compact" :rules="[numberRule, nonNegativeRule]"
-                    hide-details="auto"></v-text-field>
+                    readonly hide-details />
                 </v-col>
               </v-row>
-            </v-container>
+            </div>
+
+            <div class="bg-white pa-3 rounded border">
+              <div class="text-caption text-primary font-weight-bold mb-2">INPUT HARGA BARU</div>
+              <v-row dense>
+                <v-col cols="12">
+                  <v-text-field v-model.number="editedItem.Hpp" label="HPP Baru *" type="number" prefix="Rp"
+                    variant="outlined" density="compact" color="primary" :rules="[numberRule, nonNegativeRule]"
+                    hide-details="auto" class="mb-3" />
+                </v-col>
+                <v-col cols="12">
+                  <v-text-field v-model.number="editedItem.Harga" label="Harga Jual Baru *" type="number" prefix="Rp"
+                    variant="outlined" density="compact" color="primary" :rules="[numberRule, nonNegativeRule]"
+                    hide-details="auto" />
+                </v-col>
+              </v-row>
+            </div>
           </v-card-text>
 
-          <v-card-actions class="dialog-footer">
+          <v-divider></v-divider>
+
+          <v-card-actions class="pa-4 bg-white">
             <v-spacer></v-spacer>
-            <v-btn variant="text" @click="closeUpdateDialog" :disabled="isSaving">Batal</v-btn>
-            <v-btn color="primary" type="submit" variant="elevated" :loading="isSaving" :disabled="isSaving">
+            <v-btn variant="text" color="grey-darken-1" @click="closeUpdateDialog" :disabled="isSaving">Batal</v-btn>
+            <v-btn color="primary" type="submit" variant="elevated" :loading="isSaving" prepend-icon="mdi-check-circle">
               Update Harga
             </v-btn>
           </v-card-actions>
@@ -465,31 +491,37 @@ onMounted(() => {
 
     <!-- === DIALOG RIWAYAT HARGA === -->
     <v-dialog v-model="dialogHistoryVisible" persistent max-width="700px">
-      <v-card>
+      <v-card class="dialog-card">
         <v-card-title class="dialog-header">
-          <span class="text-subtitle-1 font-weight-medium">
-            Riwayat Harga Jual: {{ selectedItemForHistory?.Nama }} ({{ selectedItemForHistory?.Ukuran }})
+          <v-icon color="primary" class="mr-2">mdi-history</v-icon>
+          <span class="text-subtitle-1 font-weight-bold text-primary"> Riwayat Harga Jual: {{
+            selectedItemForHistory?.Nama }} ({{ selectedItemForHistory?.Ukuran }})
           </span>
           <v-spacer></v-spacer>
           <v-btn icon="mdi-close" variant="text" size="small" @click="closeHistoryDialog"></v-btn>
         </v-card-title>
-        <v-card-text class="pa-4">
+
+        <v-card-text class="pa-4 bg-grey-lighten-5">
           <v-data-table :headers="historyHeaders" :items="historyData" :loading="historyLoading" density="compact"
-            class="border rounded-sm" items-per-page="10">
+            class="border rounded-sm colored-header zebra-table" items-per-page="10">
             <template #[`item.Harga`]="{ value }">
-              {{ formatCurrency(value) }}
+              <span class="font-weight-bold text-primary">{{ formatCurrency(value) }}</span>
             </template>
+
             <template v-slot:loading>
               <v-skeleton-loader type="table-row@5"></v-skeleton-loader>
             </template>
+
             <template v-slot:no-data>
               <div class="text-center pa-4">Tidak ada riwayat harga ditemukan.</div>
             </template>
           </v-data-table>
         </v-card-text>
+
         <v-card-actions class="dialog-footer">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeHistoryDialog">Tutup</v-btn>
+          <v-btn variant="text" size="small" @click="closeHistoryDialog">Tutup</v-btn>
+          <v-btn color="primary" variant="elevated" size="small" @click="closeHistoryDialog">OK</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -498,7 +530,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Styling standar browse */
+/* =========================================
+   1. LAYOUT BROWSE (Standard)
+   ========================================= */
 .browse-content {
   display: flex;
   flex-direction: column;
@@ -519,44 +553,74 @@ onMounted(() => {
   overflow: auto;
 }
 
-/* Styling standar dialog */
+/* =========================================
+   2. TABLE STYLING (Blue Consistency)
+   ========================================= */
+
+/* Header Tabel Master & Dialog */
+.colored-header :deep(thead th) {
+  background-color: #1976D2 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+/* Checkbox Header (White on Blue) */
+.colored-header :deep(thead .v-checkbox-btn .v-selection-control__wrapper) {
+  color: white !important;
+}
+
+/* Highlight Baris Dipilih */
+.desktop-table :deep(tr.v-data-table__selected) {
+  background-color: #E3F2FD !important;
+}
+
+/* Hover Effect (Master & Zebra) */
+.desktop-table :deep(tbody tr:hover),
+.zebra-table :deep(tbody tr:hover) {
+  cursor: pointer;
+  background-color: #f5f5f5 !important;
+}
+
+/* Zebra Striping untuk Tabel Riwayat */
+.zebra-table :deep(tbody tr:nth-of-type(odd)) {
+  background-color: #fcfcfc !important;
+}
+
+/* Border Tabel di Dialog */
+.border.rounded-sm {
+  border: 1px solid #ddd !important;
+}
+
+/* =========================================
+   3. DIALOG STYLING
+   ========================================= */
 .dialog-card {
   font-size: 12px;
 }
 
 .dialog-header {
-  border-bottom: 1px solid #e0e0e0;
-  padding: 8px 16px;
+  border-bottom: 2px solid #1976D2;
+  /* Garis Biru Primary */
   background-color: #f5f5f5;
-  display: flex;
-  align-items: center;
 }
 
 .dialog-footer {
   border-top: 1px solid #e0e0e0;
-  padding: 8px 16px;
   background-color: #f5f5f5;
 }
 
-.dialog-card :deep(.v-label) {
+/* Fix Input Number (Hapus Spinner) */
+:deep(input::-webkit-outer-spin-button),
+:deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Konsistensi Font di Dialog */
+.dialog-card :deep(.v-label),
+.dialog-card :deep(input) {
   font-size: 11px !important;
-}
-
-.dialog-card :deep(input),
-.dialog-card :deep(.v-field__input) {
-  font-size: 12px !important;
-}
-
-.dialog-card :deep(.v-input) {
-  margin-bottom: 4px;
-}
-
-.v-container {
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-.v-card-text {
-  padding-bottom: 0px !important;
 }
 </style>

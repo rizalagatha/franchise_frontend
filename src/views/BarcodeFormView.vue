@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { VDataTableHeaders } from 'vuetify/components';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
 import { useToast } from 'vue-toastification';
@@ -45,6 +44,27 @@ interface LookupResultItem {
   harga: number | null;
 }
 
+interface BarcodeLabel {
+  nomor: string
+  tgl: string
+  kode: string
+  ukuran: string
+  barcode: string
+  nama: string
+  harga: string
+  charga: string
+  nourut: number
+  layoutType: string
+}
+
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
+}
+
 // Tentukan mode (Edit atau Baru)
 const isEditMode = computed(() => !!route.params.nomor);
 const pageTitle = computed(() => isEditMode.value ? 'Ubah Cetak Barcode' : 'Buat Cetak Barcode');
@@ -72,7 +92,7 @@ const isSaving = ref(false);
 
 // State untuk Lookup Barang
 const searchTerm = ref('');
-const lookupResults = ref<LookupItemResult[]>([]);
+const lookupResults = ref<LookupResultItem[]>([]);
 const isLookupLoading = ref(false);
 const isLookupVisible = ref(false); // Kontrol visibility modal lookup
 const editingRowIndex = ref<number | null>(null); // Index baris grid yg aktif
@@ -92,7 +112,7 @@ const isPrintPreviewVisible = ref(false);
 const printPreviewData = ref<any[]>([]); // Data yang akan ditampilkan di preview
 
 // Header Tabel Detail
-const tableHeaders: VDataTableHeaders = [
+const tableHeaders: TableHeader[] = [
   { title: '#', key: 'no', sortable: false, width: '50px' },
   { title: 'Kode Barang', key: 'kode', width: '120px' },
   { title: 'Barcode', key: 'barcode', width: '130px' },
@@ -218,7 +238,8 @@ const searchItem = async () => {
   if (!searchTerm.value.trim()) return;
   isLookupLoading.value = true;
   try {
-    const response = await api.get<{ items: LookupItemResult[], total: number }>('/barcodes/lookup/barang', {
+    const response = await api.get<{ items: LookupResultItem[], total: number }>(
+      '/barcodes/lookup/barang', {
       params: {
         term: searchTerm.value.trim(),
         page: 1,
@@ -231,10 +252,9 @@ const searchItem = async () => {
 
     if (total === 0) {
       toast.warning(`Barang dengan kode/barcode "${searchTerm.value}" tidak ditemukan.`);
-    } else if (total === 1) {
-      // Jika HANYA 1 hasil, panggil addItemToGrid
+    } else if (total === 1 && items[0]) {
       addItemToGrid(items[0]);
-      searchTerm.value = ''; // Kosongkan search bar
+      searchTerm.value = '';
     } else {
       // Jika > 1 hasil (misal scan kode produk), buka modal F1
       toast.info(`Ditemukan ${total} varian. Silakan pilih dari modal.`);
@@ -494,7 +514,7 @@ const preparePrintData = (
   nomorDokumen: string = 'TES', // Default 'TES' untuk test printer
   tanggalDokumen: string = format(new Date(), 'dd/MM/yy') // Default tgl hari ini
 ): any[] => {
-  const outputLabels = [];
+  const outputLabels: BarcodeLabel[] = [];
   let labelCounter = 1; // Mirip 'r' di Delphi
 
   itemsToPrint.forEach(item => {
@@ -632,7 +652,7 @@ const triggerBrowserPrint = () => {
 
 const generateBarcodesInIframe = (iframe: HTMLIFrameElement) => {
   const frameDoc = iframe.contentWindow?.document;
-  if (frameDoc && window.JsBarcode) { // Pastikan JsBarcode sudah ada
+  if (frameDoc && (window as any).JsBarcode) { // Pastikan JsBarcode sudah ada
     const svgs = frameDoc.querySelectorAll('.barcode-svg');
     svgs.forEach((svgElement) => {
       const barcodeValue = svgElement.getAttribute('data-barcode-value');
@@ -727,108 +747,80 @@ watch(printPreviewData, (newVal) => {
   <PageLayout :title="pageTitle" desktop-mode icon="mdi-barcode-scan">
     <template #header-actions>
       <v-btn size="small" color="secondary" @click="testPrinter" :loading="isPrinting"
-        :disabled="isPrinting || isSaving" prepend-icon="mdi-printer-check">
-        Tes Printer
-      </v-btn>
+        prepend-icon="mdi-printer-check">Tes Printer</v-btn>
       <v-spacer></v-spacer>
       <v-btn v-if="authStore.can(MENU_ID, requiredPermission)" size="small" color="primary" @click="save"
-        :loading="isSaving" :disabled="isSaving || isLoading" prepend-icon="mdi-content-save">
-        Simpan
-      </v-btn>
-      <v-btn size="small" @click="showConfirmation(resetForm, 'Yakin ingin batalkan perubahan?')"
-        :disabled="isSaving || isLoading" prepend-icon="mdi-cancel">
-        Batal
-      </v-btn>
-      <v-btn size="small" @click="showConfirmation(closeForm, 'Yakin ingin menutup form?')" :disabled="isSaving"
-        prepend-icon="mdi-close">
-        Tutup
-      </v-btn>
+        prepend-icon="mdi-content-save">Simpan</v-btn>
+      <v-btn size="small" variant="outlined" @click="showConfirmation(resetForm, 'Yakin ingin batalkan perubahan?')"
+        prepend-icon="mdi-cancel">Batal</v-btn>
+      <v-btn size="small" variant="tonal" color="error"
+        @click="showConfirmation(closeForm, 'Yakin ingin menutup form?')" prepend-icon="mdi-close">Tutup</v-btn>
     </template>
 
     <!-- Layout Form (Left-Right Column) -->
-    <div class="form-grid-container">
-      <!-- Left Column (Header) -->
+    <div class="form-grid-container bg-grey-lighten-3">
       <div class="left-column">
-        <div class="desktop-form-section header-section">
+        <div class="desktop-form-section header-section elevation-1 mb-3">
           <v-row dense>
-            <!-- Nomor -->
             <v-col cols="12">
-              <v-text-field label="Nomor" v-model="formHeader.nomor" readonly filled density="compact" hide-details>
-                <template #append-inner>
-                  <span v-if="!isEditMode && !formHeader.nomor"
-                    class="text-caption text-disabled">&lt;Otomatis&gt;</span>
-                </template>
-              </v-text-field>
+              <v-text-field label="Nomor" v-model="formHeader.nomor" readonly variant="filled" density="compact"
+                hide-details />
             </v-col>
-            <!-- Tanggal -->
             <v-col cols="12">
               <v-text-field label="Tanggal" v-model="formHeader.tanggal" type="date" variant="outlined"
                 density="compact" hide-details />
             </v-col>
-            <!-- Scan Barcode / Cari Kode -->
             <v-col cols="12">
-              <v-text-field label="Scan Barcode / Cari Kode Barang" v-model="searchTerm" variant="outlined"
-                density="compact" prepend-inner-icon="mdi-magnify" append-inner-icon="mdi-barcode-scan"
-                @keyup.enter="searchItem" :loading="isLookupLoading" :disabled="isLookupLoading"
-                placeholder="Enter untuk mencari..." clearable hide-details />
-              <v-col cols="12">
-                <v-radio-group v-model="selectedPrinter" inline label="Pilih Layout Printer" density="compact"
-                  hide-details class="mb-n1 mt-1">
-                  <v-radio label="XP-360B (Layout A)" value="XP-360B"></v-radio>
-                  <v-radio label="360B (Layout B)" value="360B"></v-radio>
-                </v-radio-group>
-              </v-col>
-              <v-col cols="12">
-                <v-checkbox v-model="showPriceOnLabel" label="Tampilkan Harga Jual di Label" density="compact"
-                  hide-details class="mt-n2"></v-checkbox>
-              </v-col>
+              <v-text-field label="Cari Barang / Scan Barcode" v-model="searchTerm" variant="outlined" density="compact"
+                prepend-inner-icon="mdi-magnify" color="primary" @keyup.enter="searchItem" :loading="isLookupLoading"
+                hide-details />
+            </v-col>
+          </v-row>
+        </div>
+
+        <div class="desktop-form-section elevation-1 border-left-blue">
+          <v-row dense>
+            <v-col cols="12">
+              <v-radio-group v-model="selectedPrinter" inline label="Layout Printer" density="compact" hide-details
+                color="primary">
+                <v-radio label="XP-360B (A)" value="XP-360B"></v-radio>
+                <v-radio label="360B (B)" value="360B"></v-radio>
+              </v-radio-group>
+            </v-col>
+            <v-col cols="12">
+              <v-checkbox v-model="showPriceOnLabel" label="Tampilkan Harga Jual" density="compact" hide-details
+                color="primary" class="mt-n2" />
             </v-col>
           </v-row>
         </div>
       </div>
 
-      <!-- Right Column (Grid Detail) -->
       <div class="right-column">
-        <div class="desktop-form-section d-flex flex-column fill-height">
+        <div class="desktop-form-section d-flex flex-column fill-height elevation-1 pa-0 overflow-hidden">
           <v-data-table :headers="tableHeaders" :items="items" :loading="isLoading" density="compact"
-            class="desktop-table fill-height-table" fixed-header :items-per-page="-1"
-            no-data-text="Scan barcode atau cari kode barang untuk menambah item.">
-            <!-- Kolom Nomor Urut -->
-            <template #[`item.no`]="{ index }">
-              {{ index + 1 }}
-            </template>
+            class="desktop-table fill-height-table colored-header" fixed-header :items-per-page="-1">
+
+            <template #[`item.no`]="{ index }">{{ index + 1 }}</template>
 
             <template #[`item.kode`]="{ item, index }">
-              <v-text-field :model-value="item.kode" variant="underlined" density="compact" hide-details
-                @keydown.f1.prevent="openLookup(index)" placeholder="F1 = Cari" readonly
-                @click="!item.kode && openLookup(index)" style="cursor: pointer;" />
+              <v-text-field :model-value="item.kode" variant="plain" density="compact" hide-details
+                placeholder="F1 = Cari" readonly @click="!item.kode && openLookup(index)"
+                class="cursor-pointer font-weight-bold" />
             </template>
 
-            <!-- Kolom Harga -->
             <template #[`item.harga`]="{ item }">
-              {{ formatCurrency(item.harga) }}
+              <span class="text-primary font-weight-medium">{{ formatCurrency(item.harga) }}</span>
             </template>
 
-            <!-- Kolom Jumlah (Editable) -->
             <template #[`item.jumlah`]="{ item }">
-              <v-text-field v-model.number="item.jumlah" type="number" min="0" variant="underlined" density="compact"
-                hide-details class="text-end" @focus="$event.target.select()" />
+              <v-text-field v-model.number="item.jumlah" type="number" variant="underlined" density="compact"
+                hide-details class="text-right-input" color="primary" @focus="$event.target.select()" />
             </template>
 
-            <!-- Kolom Actions (Hapus Baris) -->
-            <template #[`item.actions`]="{ item, index }">
-              <!-- Tombol hapus hanya muncul jika ada lebih dari 1 baris ATAU baris pertama tapi ada isinya -->
-              <v-icon v-if="items.length > 1 || (index === 0 && item.kode)" size="small" color="error"
-                @click="removeItem(item)">
-                mdi-delete-outline
-              </v-icon>
+            <template #[`item.actions`]="{ item }">
+              <v-icon v-if="item.kode" size="small" color="error" @click="removeItem(item)">mdi-delete-outline</v-icon>
             </template>
 
-            <!-- Loading & No Data -->
-            <template v-slot:loading>
-              <v-skeleton-loader type="table-row@5"></v-skeleton-loader>
-            </template>
-            <!-- Footer dihilangkan -->
             <template #bottom></template>
           </v-data-table>
         </div>
@@ -911,67 +903,68 @@ watch(printPreviewData, (newVal) => {
 </template>
 
 <style scoped>
-/* Styles untuk layout grid, left/right column (dari referensi Mutasi Out) */
-.form-grid-container {
-  padding: 12px;
-  height: calc(100vh - 120px);
-  /* Sesuaikan tinggi */
-  display: grid;
-  grid-template-columns: 350px 1fr;
-  /* Lebar kolom kiri lebih kecil */
-  gap: 12px;
+.form-grid-container :deep(*) {
+  font-size: 11px !important;
 }
 
+/* Layout utama dengan latar abu-abu */
+.form-grid-container {
+  padding: 12px;
+  height: calc(100vh - 100px);
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+}
+
+/* Overlay Card (Putih bersih dengan bayangan halus) */
+.desktop-form-section {
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: white !important;
+}
+
+/* Aksen garis biru di samping kiri box setting */
+.border-left-blue {
+  border-left: 4px solid #1976D2 !important;
+}
+
+/* Header Tabel Biru Primary */
+.colored-header :deep(thead th) {
+  background-color: #1976D2 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+/* Style input jumlah agar angka tebal dan rata kanan */
+.text-right-input :deep(input) {
+  text-align: right;
+  font-weight: bold;
+}
+
+/* Hilangkan Spinner Angka */
+:deep(input::-webkit-outer-spin-button),
+:deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Layouting Column */
 .left-column,
 .right-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-height: 0;
-  /* Penting untuk flex column */
 }
 
 .right-column {
   flex-grow: 1;
-  /* Kolom kanan mengisi sisa ruang */
-}
-
-/* Section styling */
-.desktop-form-section {
-  padding: 12px;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  background-color: white;
-}
-
-.header-section {
-  flex-shrink: 0;
-  /* Header tidak mengecil */
-}
-
-/* Tabel di kolom kanan mengisi tinggi */
-.desktop-table {
-  height: 100%;
-}
-
-.desktop-table :deep(.v-table__wrapper) {
-  height: 100%;
-  overflow-y: auto;
-}
-
-/* Styling input di dalam tabel */
-.v-data-table :deep(input[type='number']) {
-  text-align: right;
-  /* Angka rata kanan */
-  -moz-appearance: textfield;
-  /* Sembunyikan panah di Firefox */
-}
-
-/* Sembunyikan panah di Chrome, Safari, Edge */
-.v-data-table :deep(input[type=number]::-webkit-inner-spin-button),
-.v-data-table :deep(input[type=number]::-webkit-outer-spin-button) {
-  -webkit-appearance: none;
-  margin: 0;
 }
 </style>
 

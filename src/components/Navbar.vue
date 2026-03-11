@@ -14,6 +14,21 @@ interface NavItem {
   onClick?: () => void
 }
 
+interface MenuSection {
+  title: string
+  icon: string
+  items: NavItem[]
+}
+
+interface MenuItem {
+  title: string
+  icon: string
+  model: any
+  items?: NavItem[]
+  sections?: MenuSection[]
+  isLarge?: boolean
+}
+
 // Stores and composables
 const authStore = useAuthStore()
 const router = useRouter()
@@ -68,7 +83,7 @@ const hasAccess = (routeNameOrPath?: string) => {
 };
 
 // Menu configuration (BARU UNTUK FRANCHISE)
-const menuItems = [
+const menuItems: MenuItem[] = [
   {
     title: 'Daftar',
     icon: 'mdi-clipboard-list-outline',
@@ -186,7 +201,7 @@ onUnmounted(() => {
 
           <v-card class="nav-dropdown" elevation="8">
             <v-list class="nav-list" density="comfortable">
-              <template v-for="(item, index) in menu.items.filter(i => !i.to || hasAccess(i.to))" :key="index">
+              <template v-for="(item, index) in (menu.items ?? []).filter(i => !i.to || hasAccess(i.to))" :key="index">
                 <v-divider v-if="item.divider" class="nav-divider" />
 
                 <!-- Sub Menu Group -->
@@ -236,8 +251,8 @@ onUnmounted(() => {
           <v-card class="large-nav-dropdown" elevation="8">
             <v-container fluid class="pa-4">
               <v-row>
-                <v-col v-for="section in menu.sections" :key="section.title" :cols="12 / menu.sections.length"
-                  class="section-col">
+                <v-col v-for="section in (menu.sections ?? [])" :key="section.title"
+                  :cols="12 / ((menu.sections ?? []).length || 1)" class="section-col">
                   <div class="section-header">
                     <v-icon :icon="section.icon" size="18" class="section-icon" />
                     <h4 class="section-title">{{ section.title }}</h4>

@@ -8,6 +8,7 @@ import { useToast } from 'vue-toastification';
 import { useAuthStore } from '@/stores/authStore';
 import { useRouter } from 'vue-router';
 import { formatRupiah } from '@/utils/formatRupiah';
+import SetoranPembayaranPrintModal from '@/components/SetoranPembayaranPrintModal.vue';
 
 const toast = useToast();
 const authStore = useAuthStore();
@@ -21,6 +22,8 @@ const selected = ref<any[]>([]);
 const expanded = ref<string[]>([]);
 const isLoading = ref(true);
 const search = ref('');
+const showPrintModal = ref(false);
+const printNomor = ref('');
 
 const startDate = ref(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
 const endDate = ref(format(new Date(), 'yyyy-MM-dd'));
@@ -29,12 +32,18 @@ const endDate = ref(format(new Date(), 'yyyy-MM-dd'));
 const canInsert = computed(() => authStore.can(MENU_ID, 'insert'));
 const canEdit = computed(() => authStore.can(MENU_ID, 'edit'));
 const canDelete = computed(() => authStore.can(MENU_ID, 'delete'));
-const isSingleSelected = computed(() => selected.value.length === 1);
+const isSingleSelected = computed(() => selected.value && selected.value.length === 1);
 
 // Logika Bisnis: Data otomatis tidak boleh diubah/hapus
-const isSelectedOtomatis = computed(() => selected.value[0]?.Otomatis === 'YA');
+const isSelectedOtomatis = computed(() => {
+  const item = selected.value?.[0];
+  if (!item) return false;
+  // Cek jika item adalah objek (Otomatis) atau cari di masterData jika item hanya string Nomor
+  const fullItem = typeof item === 'object' ? item : masterData.value.find(d => d.Nomor === item);
+  return fullItem?.Otomatis === 'YA';
+});
 
-const masterHeaders: VDataTableHeaders = [
+const masterHeaders: any[] = [
   { title: 'Nomor', key: 'Nomor', width: '150px', fixed: true },
   { title: 'Tanggal', key: 'Tanggal', width: '100px' },
   { title: 'Jenis', key: 'JenisBayar', width: '100px' },
@@ -63,13 +72,24 @@ const fetchData = async () => {
   }
 };
 
-const fetchDetails = async ({ item }: { item: any }) => {
-  if (detailsData.value[item.Nomor]) return;
+const fetchDetails = async (payload: any) => {
+  // 1. Guard clause: Jika payload kosong, batalkan
+  if (!payload) return;
+
+  // 2. Ekstrak nomor dengan sangat aman menggunakan Optional Chaining (?.)
+  // Vuetify bisa saja mengirim: String, Object Mentah (payload.Nomor), atau Wrapper (payload.raw.Nomor)
+  const nomor = typeof payload === 'string'
+    ? payload
+    : (payload?.raw?.Nomor || payload?.Nomor);
+
+  // 3. Guard clause: Jika nomor tidak ditemukan atau rincian sudah ada, batalkan
+  if (!nomor || detailsData.value[nomor]) return;
+
   try {
-    const res = await api.get(`/setoran-pembayaran/${item.Nomor}/details`);
-    detailsData.value[item.Nomor] = res.data;
+    const res = await api.get(`/setoran-pembayaran/${nomor}/details`);
+    detailsData.value[nomor] = res.data;
   } catch (error) {
-    toast.error('Gagal memuat rincian.');
+    toast.error(`Gagal memuat rincian untuk ${nomor}`);
   }
 };
 
@@ -80,15 +100,63 @@ const getRowTextColor = (item: any) => {
   return '';
 };
 
+// Fungsi ini yang akan disuntikkan ke tabel untuk mengatur kelas (warna) tiap baris
+const myRowProps = (data: any) => {
+  // Ambil data mentah dengan aman
+  const rawItem = data.item?.raw || data.item;
+  return {
+    class: getRowTextColor(rawItem),
+    style: 'cursor: pointer' // Biar kursor jadi tangan saat di-hover
+  };
+};
+
+// Fungsi agar saat baris di-klik (bukan cuma checkbox-nya), baris langsung terpilih
+const handleRowClick = (event: any, { item }: any) => {
+  const raw = item?.raw || item;
+  // Karena select-strategy="single", kita atur array-nya
+  if (selected.value.length > 0 && selected.value[0]?.Nomor === raw.Nomor) {
+    selected.value = []; // Hilangkan centang jika di-klik lagi
+  } else {
+    selected.value = [raw]; // Centang baris
+  }
+};
+
+const handleEdit = () => {
+  // Gunakan optional chaining untuk keamanan
+  const item = selected.value?.[0];
+
+  if (item && item.Nomor) {
+    console.log("Navigasi ke:", item.Nomor);
+    router.push(`/transaksi/setoran-pembayaran/ubah/${item.Nomor}`);
+  } else {
+    toast.warning("Silakan pilih baris terlebih dahulu.");
+  }
+};
+
+const handlePrint = () => {
+  const item = selected.value?.[0];
+  const nomor = typeof item === 'object' ? item?.Nomor : item;
+
+  if (nomor) {
+    printNomor.value = nomor;
+    showPrintModal.value = true;
+  } else {
+    toast.warning('Pilih satu data setoran untuk dicetak.');
+  }
+};
+
+// Update handleDelete agar lebih aman
 const handleDelete = async () => {
-  const item = selected.value[0];
+  const selectedItem = selected.value?.[0];
+  if (!selectedItem) return;
+
   if (isSelectedOtomatis.value) {
-    return toast.warning('Setoran Otomatis tidak bisa dihapus.'); //
+    return toast.warning('Setoran Otomatis tidak bisa dihapus.');
   }
 
-  if (confirm(`Yakin hapus setoran ${item.Nomor}?`)) {
+  if (confirm(`Yakin hapus setoran ${selectedItem.Nomor}?`)) {
     try {
-      await api.delete(`/setoran-pembayaran/${item.Nomor}`);
+      await api.delete(`/setoran-pembayaran/${selectedItem.Nomor}`);
       toast.success('Data dihapus.');
       fetchData();
       selected.value = [];
@@ -113,12 +181,13 @@ onMounted(fetchData);
         @click="router.push('/transaksi/setoran-pembayaran/baru')">Baru</v-btn>
 
       <v-btn v-if="canEdit" size="small" :disabled="!isSingleSelected || isSelectedOtomatis" prepend-icon="mdi-pencil"
-        @click="router.push(`/transaksi/setoran-pembayaran/ubah/${selected[0].Nomor}`)">Ubah</v-btn>
+        @click="handleEdit">Ubah</v-btn>
 
       <v-btn v-if="canDelete" size="small" color="error" :disabled="!isSingleSelected || isSelectedOtomatis"
         prepend-icon="mdi-delete" @click="handleDelete">Hapus</v-btn>
 
-      <v-btn size="small" color="secondary" :disabled="!isSingleSelected" prepend-icon="mdi-printer">Cetak</v-btn>
+      <v-btn size="small" color="secondary" :disabled="!isSingleSelected" prepend-icon="mdi-printer"
+        @click="handlePrint">Cetak</v-btn>
 
       <v-btn size="small" variant="outlined" prepend-icon="mdi-file-export" @click="handleExport">Export</v-btn>
     </template>
@@ -136,39 +205,43 @@ onMounted(fetchData);
 
       <div class="table-container">
         <v-data-table v-model="selected" v-model:expanded="expanded" :headers="masterHeaders" :items="masterData"
-          :search="search" :loading="isLoading" item-value="Nomor" show-select show-expand select-strategy="single"
-          density="compact" fixed-header class="desktop-table fill-height-table"
-          @click:row="(e, { item }) => selected = [item]"
-          @update:expanded="(val) => { if (val.length > 0) fetchDetails({ item: { Nomor: val[val.length - 1] } }) }">
-          <template #item="{ item, isSelected, toggleSelect, isExpanded, toggleExpand }">
-            <tr :class="[isSelected ? 'v-data-table__selected' : '', getRowTextColor(item)]"
-              @click="toggleSelect(!isSelected)">
-              <td>
-                <v-checkbox-btn :model-value="isSelected" color="primary"></v-checkbox-btn>
-              </td>
-              <td>{{ item.Nomor }}</td>
-              <td>{{ format(new Date(item.Tanggal), 'dd/MM/yyyy') }}</td>
-              <td>{{ item.JenisBayar }}</td>
-              <td class="text-right">{{ formatRupiah(item.Nominal) }}</td>
-              <td class="text-right">{{ formatRupiah(item.diBayarkan) }}</td>
-              <td class="text-right">{{ formatRupiah(item.Sisa) }}</td>
-              <td>{{ item.Customer }}</td>
-              <td>{{ item.NamaBank || '-' }}</td>
-              <td class="text-center">
-                <v-chip v-if="item.Otomatis === 'YA'" size="x-small" color="blue" variant="flat">OTOMATIS</v-chip>
-              </td>
-              <td class="text-right">
-                <v-btn :icon="isExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down'" size="x-small" variant="text"
-                  @click.stop="toggleExpand(!isExpanded)"></v-btn>
-              </td>
-            </tr>
+          :search="search" :loading="isLoading" item-value="Nomor" select-strategy="single" return-object show-select
+          show-expand density="compact" fixed-header class="desktop-table fill-height-table" :row-props="myRowProps"
+          @click:row="handleRowClick" @update:expanded="(val) => {
+            if (val && val.length > 0) {
+              fetchDetails(val[val.length - 1]);
+            }
+          }">
+
+          <template #[`item.Tanggal`]="{ item }">
+            {{ item.raw?.Tanggal ? format(new Date(item.raw.Tanggal), 'dd/MM/yyyy') : '-' }}
+          </template>
+
+          <template #[`item.Nominal`]="{ item }">
+            {{ formatRupiah(item.raw?.Nominal) }}
+          </template>
+
+          <template #[`item.diBayarkan`]="{ item }">
+            {{ formatRupiah(item.raw?.diBayarkan) }}
+          </template>
+
+          <template #[`item.Sisa`]="{ item }">
+            {{ formatRupiah(item.raw?.Sisa) }}
+          </template>
+
+          <template #[`item.NamaBank`]="{ item }">
+            {{ item.raw?.NamaBank || '-' }}
+          </template>
+
+          <template #[`item.Otomatis`]="{ item }">
+            <v-chip v-if="item.raw?.Otomatis === 'YA'" size="x-small" color="blue" variant="flat">OTOMATIS</v-chip>
           </template>
 
           <template #expanded-row="{ columns, item }">
             <tr>
               <td :colspan="columns.length" class="bg-grey-lighten-4 pa-2">
-                <v-card variant="outlined" density="compact" class="mx-4 my-2">
-                  <v-data-table v-if="detailsData[item.Nomor]" :items="detailsData[item.Nomor]" :headers="[
+                <v-card v-if="item?.raw?.Nomor" variant="outlined" density="compact" class="mx-4 my-2">
+                  <v-data-table v-if="detailsData[item.raw.Nomor]" :items="detailsData[item.raw.Nomor]" :headers="[
                     { title: 'Inv. Bayar', key: 'Invoice' },
                     { title: 'Tgl Inv', key: 'TglInvoice' },
                     { title: 'Nominal Inv', key: 'Nominal', align: 'end' },
@@ -181,7 +254,8 @@ onMounted(fetchData);
                     <template #[`item.Nominal`]="{ value }">{{ formatRupiah(value) }}</template>
                     <template #[`item.Bayar`]="{ value }">{{ formatRupiah(value) }}</template>
                   </v-data-table>
-                  <v-skeleton-loader v-else type="table-row-divider@3"></v-skeleton-loader>
+
+                  <v-progress-linear v-else indeterminate color="primary" height="2"></v-progress-linear>
                 </v-card>
               </td>
             </tr>
@@ -189,6 +263,9 @@ onMounted(fetchData);
         </v-data-table>
       </div>
     </div>
+
+    <SetoranPembayaranPrintModal v-model="showPrintModal" :nomor="printNomor" />
+
   </PageLayout>
 </template>
 

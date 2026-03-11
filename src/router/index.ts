@@ -24,6 +24,10 @@ import FskView from "@/views/FskView.vue";
 import FskFormView from "@/views/FskFormView.vue";
 import SetoranPembayaranView from "@/views/SetoranPembayaranView.vue";
 import SetoranPembayaranFormView from "@/views/SetoranPembayaranFormView.vue";
+import LaporanStokView from "@/views/LaporanStokView.vue";
+import LaporanPenjualanView from "@/views/LaporanPenjualanView.vue";
+import UserBrowseView from "@/views/UserBrowseView.vue";
+import UserFormView from "@/views/UserFormView.vue";
 
 const routes = [
   {
@@ -309,6 +313,45 @@ const routes = [
       menuId: "33",
       title: "Ubah Setoran Pembayaran",
     },
+  },
+  {
+    path: "/laporan/stok",
+    name: "LaporanStok",
+    component: LaporanStokView,
+    meta: {
+      requiresAuth: true,
+      menuId: "51", // Sesuai dengan hak akses di database
+      title: "Laporan Stok",
+    },
+  },
+  {
+    path: "/laporan/penjualan",
+    name: "LaporanPenjualan",
+    component: LaporanPenjualanView,
+    meta: {
+      requiresAuth: true,
+      menuId: "52",
+      title: "Laporan Penjualan",
+    },
+  },
+  {
+    path: "/tools/users",
+    name: "UserBrowse",
+    component: UserBrowseView,
+    meta: { requiresAuth: true, menuId: "1" },
+  },
+  {
+    path: "/tools/users/baru",
+    name: "UserBaru",
+    component: UserFormView,
+    meta: { requiresAuth: true, menuId: "1" },
+  },
+  // Rute Edit
+  {
+    path: "/tools/users/ubah/:kode",
+    name: "UserUbah",
+    component: UserFormView,
+    meta: { requiresAuth: true, menuId: "1" },
   },
 ];
 

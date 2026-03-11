@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components';
 import api from '@/services/api';
 import { useToast } from 'vue-toastification';
 
@@ -8,6 +7,14 @@ interface BankItem {
   rek_nomor: string;
   rek_namabank: string;
   rek_nama: string;
+}
+
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
 }
 
 const props = defineProps<{ modelValue: boolean }>();
@@ -18,8 +25,7 @@ const items = ref<BankItem[]>([]);
 const loading = ref(false);
 const search = ref('');
 
-const headers: VDataTableHeaders = [
-  // 'key' HARUS sama persis dengan alias di backend (Case Sensitive!)
+const headers: TableHeader[] = [
   { title: 'No. Rekening', key: 'NoRekening', width: '150px' },
   { title: 'Nama Bank', key: 'NamaBank', width: '200px' },
   { title: 'Atas Nama', key: 'AtasNama' },
@@ -66,7 +72,7 @@ watch(() => props.modelValue, (val) => {
 
         <v-data-table :headers="headers" :items="items" :search="search" :loading="loading" item-value="rek_nomor" hover
           density="compact" fixed-header class="desktop-table flex-grow-1"
-          @click:row="(e, { item }) => selectBank(item)">
+          @click:row="(e: Event, { item }: { item: BankItem }) => selectBank(item)">
         </v-data-table>
       </v-card-text>
     </v-card>

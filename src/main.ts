@@ -26,9 +26,10 @@ import { createVuetify } from "vuetify";
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
 import retailVuetifyConfig from "./plugins/vuetify";
+import type { VuetifyOptions } from "vuetify";
 
 const vuetify = createVuetify({
-  ...retailVuetifyConfig,
+  ...(retailVuetifyConfig as VuetifyOptions),
   components,
   directives,
 });

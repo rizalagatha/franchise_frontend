@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components';
 import { format, subDays } from 'date-fns'; // Untuk default tanggal
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
@@ -32,6 +31,14 @@ interface BarcodeDetail {
   Jumlah: number;
 }
 
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
+}
+
 // --- State ---
 const headersData = ref<BarcodeHeader[]>([]);
 const detailsData = ref<{ [key: string]: BarcodeDetail[] }>({});
@@ -57,7 +64,7 @@ const canDelete = computed(() => authStore.can(MENU_ID, 'delete'));
 const isSingleSelected = computed(() => selected.value.length === 1);
 
 // Header Tabel Master (Header Barcode)
-const masterHeaders: VDataTableHeaders = [
+const masterHeaders: TableHeader[] = [
   { title: 'Nomor', key: 'Nomor', width: '180px' },
   { title: 'Tanggal', key: 'Tanggal', width: '150px' },
   { title: 'Dibuat Oleh', key: 'Created' },
@@ -65,7 +72,7 @@ const masterHeaders: VDataTableHeaders = [
 ];
 
 // Header Tabel Detail (Item Barcode)
-const detailHeaders: VDataTableHeaders = [
+const detailHeaders: TableHeader[] = [
   { title: 'Kode Barang', key: 'Kode', width: '120px' },
   { title: 'Barcode', key: 'Barcode', width: '130px' },
   { title: 'Nama Barang', key: 'Nama', width: '300px' },
@@ -118,15 +125,22 @@ const openNewForm = () => {
 
 /// Navigasi untuk tombol Ubah
 const openEditForm = () => {
-  if (!isSingleSelected.value) return; // Guard clause
+  if (!isSingleSelected.value) return;
+
   const itemToEdit = selected.value[0];
+  if (!itemToEdit) return;
+
   router.push(`/daftar/cetak-barcode/ubah/${itemToEdit.Nomor}`);
 };
 
 // Buka dialog konfirmasi hapus
 const confirmDelete = () => {
-  if (!isSingleSelected.value) return; // Guard clause
-  itemToDelete.value = selected.value[0];
+  if (!isSingleSelected.value) return;
+
+  const item = selected.value[0];
+  if (!item) return;
+
+  itemToDelete.value = item;
   confirmDeleteDialogVisible.value = true;
 };
 
@@ -173,6 +187,15 @@ const exportData = () => {
   XLSX.writeFile(workbook, "CetakBarcode_Headers.xlsx");
 };
 
+const handleRowClick = (event: PointerEvent, { item }: { item: BarcodeHeader }) => {
+  // Jika baris yang sama diklik, lepas pilihan. Jika beda, pilih yang baru.
+  if (selected.value.length > 0 && selected.value[0].Nomor === item.Nomor) {
+    selected.value = [];
+  } else {
+    selected.value = [item];
+  }
+};
+
 // Ambil data awal saat komponen dimuat
 onMounted(() => {
   if (hasViewPermission.value) {
@@ -187,18 +210,21 @@ onMounted(() => {
 watch([startDate, endDate], fetchHeadersData);
 
 // Watcher ini akan memicu load detail saat baris baru dibuka
-watch(expanded, (newExpandedItems: BarcodeHeader[]) => {
-
-  // Cari item (object) yang baru ditambahkan
-  const newItem = newExpandedItems.find(item =>
-    !detailsData.value[item.Nomor] && // Cek pakai item.Nomor
-    !loadingDetails.value.has(item.Nomor) // Cek pakai item.Nomor
-  );
+watch(expanded, (newExpandedItems: any[]) => {
+  // 1. Cari item yang baru dibuka
+  const newItem = newExpandedItems.find(item => {
+    // Ambil nomor dengan aman (cek apakah dia objek atau string)
+    const nomor = typeof item === 'object' ? item.Nomor : item;
+    return !detailsData.value[nomor] && !loadingDetails.value.has(nomor);
+  });
 
   if (newItem) {
-    // Panggil fetchDetailsData dengan string-nya (newItem.Nomor),
-    // BUKAN dengan seluruh object (newItem)
-    fetchDetailsData(newItem.Nomor);
+    // 2. Pastikan yang dikirim ke API adalah STRING Nomor, bukan OBJEK
+    const nomorYangBenar = typeof newItem === 'object' ? newItem.Nomor : newItem;
+
+    if (nomorYangBenar) {
+      fetchDetailsData(nomorYangBenar);
+    }
   }
 });
 
@@ -236,29 +262,25 @@ watch(expanded, (newExpandedItems: BarcodeHeader[]) => {
       <div class="table-container">
         <v-data-table v-model:expanded="expanded" v-model="selected" :headers="masterHeaders" :items="headersData"
           :loading="isLoadingHeaders" item-value="Nomor" density="compact"
-          class="desktop-table fill-height-table master-table" fixed-header hover show-select return-object show-expand
-          :items-per-page="-1">
+          class="desktop-table fill-height-table master-table colored-header" fixed-header hover show-select
+          return-object show-expand select-strategy="single" @click:row="handleRowClick" :items-per-page="-1">
 
           <template #expanded-row="{ columns, item }">
             <tr>
               <td :colspan="columns.length" class="expanded-detail-cell">
                 <div class="detail-container">
                   <div class="detail-table-wrapper">
-                    <div v-if="loadingDetails.has(item.Nomor)" class="text-center py-2 text-caption">
-                      <v-progress-circular indeterminate size="20" width="2" color="primary"
-                        class="me-2"></v-progress-circular>
-                      Memuat detail...
+                    <div v-if="loadingDetails.has(item.Nomor)" class="text-center py-4">
+                      <v-progress-circular indeterminate size="24" color="primary"></v-progress-circular>
                     </div>
-                    <v-data-table v-else-if="detailsData[item.Nomor] && detailsData[item.Nomor].length"
-                      :headers="detailHeaders" :items="detailsData[item.Nomor]" item-value="Barcode" density="compact"
-                      class="detail-table" :items-per-page="-1">
+
+                    <v-data-table v-else-if="detailsData[item.Nomor]?.length" :headers="detailHeaders"
+                      :items="detailsData[item.Nomor] ?? []" item-value="Barcode" density="compact"
+                      class="detail-table colored-header-sub" hide-default-footer>
                       <template #[`item.Jumlah`]="{ value }">
-                        {{ value?.toLocaleString('id-ID') ?? '-' }}
+                        <span class="font-weight-bold">{{ value?.toLocaleString('id-ID') ?? '-' }}</span>
                       </template>
-                      <template #bottom></template> </v-data-table>
-                    <div v-else class="text-center py-2 text-caption">
-                      Tidak ada data detail item ditemukan.
-                    </div>
+                    </v-data-table>
                   </div>
                 </div>
               </td>
@@ -306,46 +328,70 @@ watch(expanded, (newExpandedItems: BarcodeHeader[]) => {
 </template>
 
 <style scoped>
-/* Layout dasar browse (Sama seperti sebelumnya) */
+/* =========================================
+   1. LAYOUT & TABLE STRUCTURE
+   ========================================= */
 .browse-content {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 120px);
 }
 
-.filter-section {
-  flex-shrink: 0;
-}
-
 .table-container {
   flex-grow: 1;
   overflow: hidden;
-  /* Penting */
   border: 1px solid #e0e0e0;
   border-radius: 4px;
 }
 
-/* VDataTable harus mengisi table-container */
-.v-data-table {
-  height: 100%;
+/* =========================================
+   2. BLUE CONSISTENCY (Primary)
+   ========================================= */
+
+/* Header Tabel Master */
+.colored-header :deep(thead th) {
+  background-color: #1976D2 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
+  font-size: 11px;
 }
 
-.v-data-table :deep(.v-table__wrapper) {
-  height: 100%;
-  overflow-y: auto;
+/* Header Tabel Detail (Warna sedikit lebih soft agar hirarki jelas) */
+.colored-header-sub :deep(thead th) {
+  background-color: #424242 !important;
+  /* Abu-abu gelap profesional */
+  color: white !important;
+  font-size: 10px;
 }
 
-/* Styling untuk area expanded detail */
+/* Checkbox Header agar Putih */
+.colored-header :deep(thead .v-checkbox-btn .v-selection-control__wrapper) {
+  color: white !important;
+}
+
+/* Highlight Baris Master yang Dipilih */
+.master-table :deep(tr.v-data-table__selected) {
+  background-color: #E3F2FD !important;
+}
+
+/* Hover Effect */
+.master-table :deep(tbody tr:hover) {
+  cursor: pointer;
+  background-color: #f5f5f5 !important;
+}
+
+/* =========================================
+   3. EXPANDED DETAIL STYLING
+   ========================================= */
 .expanded-detail-cell {
   padding: 0 !important;
-  /* Hilangkan padding default */
-  background-color: #f7f7f7;
-  /* Warna latar belakang area detail */
+  background-color: #f8f9fa;
 }
 
 .detail-container {
-  padding: 8px 16px 8px 60px;
-  /* Beri padding + indentasi kiri */
+  padding: 10px 16px 10px 60px;
+  /* Indentasi agar terlihat "di dalam" master */
 }
 
 .detail-table-wrapper {
@@ -353,16 +399,10 @@ watch(expanded, (newExpandedItems: BarcodeHeader[]) => {
   border-radius: 4px;
   overflow: hidden;
   background-color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.detail-table {
+.detail-table :deep(td) {
   font-size: 11px !important;
-  /* Font lebih kecil untuk detail */
-}
-
-.detail-table :deep(td),
-.detail-table :deep(th) {
-  padding: 0 8px !important;
-  height: 26px !important;
 }
 </style>

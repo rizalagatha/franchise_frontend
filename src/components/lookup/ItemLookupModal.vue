@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import type { VDataTableHeaders, VDataTableServer } from 'vuetify/components';
+import type { VDataTableServer } from 'vuetify/components';
 import api from '@/services/api';
 import { useToast } from 'vue-toastification';
 import type { AxiosError } from 'axios';
@@ -18,13 +18,21 @@ interface LookupItem {
   harga?: number | null; // Untuk cetak barcode
 }
 
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  minWidth?: string
+  align?: 'start' | 'center' | 'end'
+}
+
 // Props & Emits
 // modelValue untuk kontrol v-dialog
 // source tidak perlu serumit retail
 const props = defineProps<{
   modelValue: boolean;
-  source: 'cetak-barcode' | 'koreksi-stok';
-  tanggal?: string; // Opsional: hanya untuk 'koreksi-stok'
+  source: 'cetak-barcode' | 'koreksi-stok' | 'kasir'; // Tambahkan 'kasir'
+  tanggal?: string;
 }>();
 const emit = defineEmits(['update:modelValue', 'item-selected']);
 
@@ -44,19 +52,20 @@ const apiUrl = computed(() => {
 });
 
 // Header Modal
-const headers = computed<VDataTableHeaders>(() => {
-  if (props.source === 'koreksi-stok') {
-    // Header lengkap untuk Koreksi Stok
+const headers = computed<TableHeader[]>(() => {
+  // Header untuk Kasir dan Koreksi Stok hampir sama (menampilkan stok/harga)
+  if (props.source === 'kasir' || props.source === 'koreksi-stok') {
     return [
-      { title: 'Kode', key: 'kode', width: '150px' },
-      { title: 'Nama Barang', key: 'nama', minWidth: '250px' },
-      { title: 'Ukuran', key: 'ukuran', width: '100px' },
-      { title: 'Stok', key: 'stok', align: 'end', width: '80px' },
-      { title: 'Barcode', key: 'barcode', width: '150px' },
-      { title: 'HPP', key: 'hpp', align: 'end', width: '120px' },
+      { title: 'Kode', key: 'kode', width: '120px' },
+      { title: 'Barcode', key: 'barcode', width: '120px' },
+      { title: 'Nama Barang', key: 'nama', minWidth: '200px' },
+      { title: 'Ukuran', key: 'ukuran', width: '80px', align: 'center' },
+      { title: 'Harga', key: 'harga', width: '110px', align: 'end' },
+      { title: 'Stok', key: 'stok', width: '80px', align: 'end' },
     ];
   }
-  // Default: 'cetak-barcode' (Hanya Kode & Nama)
+
+  // Default untuk cetak-barcode
   return [
     { title: 'Kode', key: 'kode', width: '150px' },
     { title: 'Nama Barang', key: 'nama' },
@@ -160,16 +169,14 @@ watch(() => props.modelValue, (newValue) => {
           <!-- Render baris secara dinamis -->
           <template #item="{ item }">
             <tr style="cursor: pointer;" @click="selectItem(item)">
-              <!-- Kolom Umum -->
               <td>{{ item.kode }}</td>
+              <td>{{ item.barcode }}</td>
               <td>{{ item.nama }}</td>
+              <td class="text-center">{{ item.ukuran }}</td>
 
-              <!-- Kolom Khusus 'koreksi-stok' -->
-              <template v-if="props.source === 'koreksi-stok'">
-                <td>{{ item.ukuran }}</td>
-                <td class="text-end">{{ formatNumber(item.stok) }}</td>
-                <td>{{ item.barcode }}</td>
-                <td class="text-end">{{ formatCurrency(item.hpp) }}</td>
+              <template v-if="props.source !== 'cetak-barcode'">
+                <td class="text-end text-primary font-weight-bold">{{ formatCurrency(item.harga) }}</td>
+                <td class="text-end" :class="item.stok <= 0 ? 'text-error' : ''">{{ formatNumber(item.stok) }}</td>
               </template>
             </tr>
           </template>

@@ -140,7 +140,7 @@ watch(() => props.modelValue, (val) => {
             </thead>
             <tbody>
               <tr v-for="(item, idx) in printData.details" :key="idx">
-                <td class="text-center">{{ idx + 1 }}</td>
+                <td class="text-center">{{ Number(idx) + 1 }}</td>
                 <td>{{ item.kode }}</td>
                 <td>{{ item.nama }}</td>
                 <td class="text-center">{{ item.ukuran }}</td>
@@ -168,7 +168,7 @@ watch(() => props.modelValue, (val) => {
               <div class="summary-item"><span>Bayar :</span> <span>{{ formatRupiah(printData.summary.bayar) }}</span>
               </div>
               <div class="summary-item"><span>Kembali :</span> <span>{{ formatRupiah(printData.summary.kembali)
-                  }}</span></div>
+              }}</span></div>
             </div>
           </div>
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { VDataTableHeaders } from 'vuetify/components';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
 import { useToast } from 'vue-toastification';
@@ -39,6 +38,14 @@ interface PembelianItem {
   warna?: string;
 }
 
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
+}
+
 // Tentukan mode
 const isEditMode = computed(() => !!route.params.nomor);
 const pageTitle = computed(() => isEditMode.value ? 'Ubah Data Pembelian' : 'Input Pembelian Baru');
@@ -72,7 +79,7 @@ const confirmText = ref('');
 const pendingAction = ref<(() => void) | null>(null);
 
 // Header Tabel Detail
-const tableHeaders: VDataTableHeaders = [
+const tableHeaders: TableHeader[] = [
   { title: '#', key: 'no', sortable: false, width: '40px' },
   { title: 'Kode Barang', key: 'kode', width: '120px' },
   { title: 'Barcode', key: 'barcode', width: '130px' },
@@ -367,91 +374,92 @@ onMounted(async () => { // <-- Jadikan 'async'
     </template>
 
     <!-- Layout Form (Left-Right Column) -->
-    <div class="form-grid-container">
-      <!-- Left Column (Header) -->
-      <div class="left-column">
-        <div class="desktop-form-section header-section">
+    <div class="form-grid-container bg-grey-lighten-3">
+      <aside class="left-column">
+        <div class="desktop-form-section elevation-1 mb-3">
           <v-row dense>
-            <!-- Nomor -->
             <v-col cols="12">
-              <v-text-field label="Nomor" v-model="formHeader.nomor" readonly filled density="compact" hide-details>
+              <v-text-field label="Nomor" v-model="formHeader.nomor" readonly variant="filled" density="compact"
+                hide-details>
                 <template #append-inner>
                   <span v-if="!isEditMode && !formHeader.nomor"
                     class="text-caption text-disabled">&lt;Otomatis&gt;</span>
                 </template>
               </v-text-field>
             </v-col>
-            <!-- Tanggal -->
             <v-col cols="12">
               <v-text-field label="Tanggal" v-model="formHeader.tanggal" type="date" variant="outlined"
                 density="compact" hide-details />
             </v-col>
-            <!-- Nomor Invoice -->
             <v-col cols="12">
-              <v-text-field label="Nomor Invoice" v-model="formHeader.noInvoice" variant="outlined" density="compact"
-                hide-details :loading="isLookupLoading" :readonly="isLookupLoading || isEditMode"
-                @blur="onNoInvoiceBlur" placeholder="Ketik No. Inv lalu Enter/Blur" @keyup.enter="onNoInvoiceBlur" />
+              <v-text-field label="Nomor Invoice Kaosan" v-model="formHeader.noInvoice" variant="outlined"
+                density="compact" hide-details :loading="isLookupLoading" :readonly="isLookupLoading || isEditMode"
+                color="primary" @blur="onNoInvoiceBlur" placeholder="Ketik No. Inv lalu Enter"
+                @keyup.enter="onNoInvoiceBlur" />
             </v-col>
-            <!-- Tgl Invoice -->
             <v-col cols="12">
               <v-text-field label="Tgl. Invoice" v-model="formHeader.tglInvoice" type="date" variant="outlined"
                 density="compact" hide-details />
             </v-col>
-            <!-- Keterangan -->
             <v-col cols="12">
-              <v-textarea label="Keterangan" v-model="formHeader.keterangan" variant="outlined" rows="3"
+              <v-textarea label="Keterangan" v-model="formHeader.keterangan" variant="outlined" rows="2"
                 density="compact" hide-details />
             </v-col>
           </v-row>
         </div>
 
-        <!-- Kolom Kiri Bawah (Scan & Total) -->
-        <div class="desktop-form-section">
+        <div class="desktop-form-section elevation-1 border-left-blue">
           <v-text-field label="Scan Barcode / Cari Kode Barang" v-model="scanBarcode" variant="outlined"
             density="compact" prepend-inner-icon="mdi-magnify" append-inner-icon="mdi-barcode-scan"
             @keyup.enter="onScanBarcode" :loading="isLookupLoading" :disabled="isLookupLoading"
-            placeholder="Enter untuk menambah" clearable hide-details class="mb-3" />
-          <v-text-field label="Total Pembelian (HPP)" :model-value="formatCurrency(grandTotal)" readonly filled
-            density="compact" hide-details class="text-h6 font-weight-bold text-deep-purple" />
+            placeholder="Enter untuk menambah" clearable hide-details class="mb-3" color="primary" />
+
+          <v-text-field label="Total Pembelian (HPP)" :model-value="formatCurrency(grandTotal)" readonly
+            variant="filled" density="compact" hide-details class="total-field-highlight" />
         </div>
+      </aside>
 
-      </div>
-
-      <!-- Right Column (Grid Detail) -->
-      <div class="right-column">
-        <div class="desktop-form-section d-flex flex-column fill-height">
+      <main class="right-column">
+        <div class="desktop-form-section d-flex flex-column fill-height elevation-1 pa-0 overflow-hidden">
           <v-data-table :headers="tableHeaders" :items="items" :loading="isLoading" density="compact"
-            class="desktop-table fill-height-table" fixed-header :items-per-page="-1"
+            class="desktop-table fill-height-table colored-header" fixed-header :items-per-page="-1"
             no-data-text="Scan barcode atau tarik dari invoice.">
-            <!-- Kolom Nomor Urut -->
+
             <template #[`item.no`]="{ index }">
               {{ index + 1 }}
             </template>
-            <!-- Kolom Readonly -->
+
             <template #[`item.qtyinv`]="{ value }">{{ formatNumber(value) }}</template>
             <template #[`item.hpp`]="{ value }">{{ formatCurrency(value) }}</template>
             <template #[`item.jual`]="{ value }">{{ formatCurrency(value) }}</template>
-            <template #[`item.total`]="{ value }"><span class="font-weight-bold">{{ formatCurrency(value)
-            }}</span></template>
 
-            <!-- Kolom Qty Terima (Editable) -->
-            <template #[`item.jumlah`]="{ item }">
-              <v-text-field v-model.number="item.jumlah" type="number" min="0" variant="underlined" density="compact"
-                hide-details class="text-end qty-terima-input" @focus="$event.target.select()" />
+            <template #[`item.total`]="{ value }">
+              <span class="text-primary font-weight-bold">{{ formatCurrency(value) }}</span>
             </template>
 
-            <!-- Kolom Actions (Hapus Baris) -->
+            <template #[`item.jumlah`]="{ item }">
+              <v-text-field v-model.number="item.jumlah" type="number" min="0" variant="underlined" density="compact"
+                hide-details class="text-right-input" color="primary" @focus="$event.target.select()" />
+            </template>
+
             <template #[`item.actions`]="{ item }">
-              <v-icon size="small" color="error" @click="removeItem(item)" tabindex="-1">
+              <v-icon v-if="item.kode" size="small" color="error" @click="removeItem(item)" tabindex="-1">
                 mdi-delete-outline
               </v-icon>
             </template>
 
-            <template v-slot:loading>...</template>
-            <template #bottom></template> <!-- Footer dihilangkan -->
+            <template v-slot:loading>
+              <div class="text-center py-10">
+                <v-progress-circular indeterminate color="primary" size="32" width="3"></v-progress-circular>
+                <div class="mt-2 text-primary font-weight-bold" style="font-size: 11px;">
+                  Menarik data dari server...
+                </div>
+              </div>
+            </template>
+            <template #bottom></template>
           </v-data-table>
         </div>
-      </div>
+      </main>
     </div>
 
     <!-- Dialog Konfirmasi -->
@@ -474,21 +482,25 @@ onMounted(async () => { // <-- Jadikan 'async'
 </template>
 
 <style scoped>
-/* Salin style dari BarcodeFormView.vue */
+/* 1. Global Font 11px untuk area Form */
+.form-grid-container :deep(*) {
+  font-size: 11px !important;
+}
+
+/* 2. Layout Grid */
 .form-grid-container {
   padding: 12px;
-  height: calc(100vh - 120px);
+  height: calc(100vh - 100px);
   display: grid;
-  grid-template-columns: 350px 1fr;
-  /* Kolom kiri 350px */
-  gap: 12px;
+  grid-template-columns: 320px 1fr;
+  /* Lebar kolom kiri */
+  gap: 16px;
 }
 
 .left-column,
 .right-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-height: 0;
 }
 
@@ -496,17 +508,50 @@ onMounted(async () => { // <-- Jadikan 'async'
   flex-grow: 1;
 }
 
+/* 3. Overlay Section Styling */
 .desktop-form-section {
-  padding: 12px;
+  padding: 16px;
   border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  background-color: white;
+  border-radius: 8px;
+  background-color: white !important;
 }
 
-.header-section {
-  flex-shrink: 0;
+/* Aksen Garis Biru Samping */
+.border-left-blue {
+  border-left: 4px solid #1976D2 !important;
 }
 
+/* 4. Konsistensi Biru (Tabel Header) */
+.colored-header :deep(thead th) {
+  background-color: #1976D2 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
+  height: 36px !important;
+}
+
+/* 5. Custom Input Grid */
+.text-right-input :deep(input) {
+  text-align: right;
+  font-weight: bold;
+}
+
+/* Highlight Field Total */
+.total-field-highlight :deep(input) {
+  color: #1976D2 !important;
+  font-weight: 900 !important;
+  font-size: 15px !important;
+  /* Total dibuat lebih besar sedikit */
+}
+
+/* Hilangkan Spinner Angka */
+:deep(input::-webkit-outer-spin-button),
+:deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Table Wrapper */
 .desktop-table {
   height: 100%;
 }
@@ -516,20 +561,7 @@ onMounted(async () => { // <-- Jadikan 'async'
   overflow-y: auto;
 }
 
-/* Styling input di dalam tabel */
-.v-data-table :deep(input[type='number']) {
-  text-align: right;
-  -moz-appearance: textfield;
-}
-
-.v-data-table :deep(input[type=number]::-webkit-inner-spin-button),
-.v-data-table :deep(input[type=number]::-webkit-outer-spin-button) {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.v-data-table :deep(.v-field--variant-underlined .v-field__input) {
-  padding-top: 0;
-  padding-bottom: 2px;
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>

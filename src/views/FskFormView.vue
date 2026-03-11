@@ -29,7 +29,7 @@ const formHeader = ref({
   fsk_nomor: '',
   fsk_tanggal: format(new Date(), 'yyyy-MM-dd'),
   fsk_kasir: 'ALL', // Default cbKasir
-  user_create: authStore.user?.user_kode || '',
+  user_create: authStore.user?.kode || '',
 });
 
 // Detail 1: Transaksi (CDS) & Detail 2: Rekap (CDS2)

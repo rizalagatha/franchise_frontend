@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import type { VDataTableHeaders, VForm } from 'vuetify/components';
+import type { VForm } from 'vuetify/components';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
 import { useToast } from 'vue-toastification';
@@ -27,6 +27,14 @@ interface RekeningFormData {
   rek_nomor: string;
   rek_namabank: string;
   rek_atasnama: string | null;
+}
+
+type TableHeader = {
+  title: string
+  key: string
+  align?: 'start' | 'center' | 'end'
+  width?: string
+  sortable?: boolean
 }
 
 // --- State Browse ---
@@ -59,9 +67,10 @@ const canInsert = computed(() => authStore.can(MENU_ID, 'insert'));
 const canEdit = computed(() => authStore.can(MENU_ID, 'edit'));
 const canDelete = computed(() => authStore.can(MENU_ID, 'delete'));
 const isSingleSelected = computed(() => selected.value.length === 1);
+const selectedItem = computed(() => selected.value[0] ?? null)
 
 // Header Tabel Master (Simple)
-const masterHeaders: VDataTableHeaders = [
+const masterHeaders: TableHeader[] = [
   { title: 'No Rekening', key: 'NoRekening', width: '200px' },
   { title: 'Nama Bank', key: 'NamaBank', width: '250px' },
   { title: 'Atas Nama', key: 'AtasNama' },
@@ -191,20 +200,24 @@ const executeSave = async () => {
   }
 };
 
-// Logika dialog konfirmasi (Simpan & Batal)
-const showConfirmation = (action: () => void, text: string) => {
-  // pendingAction.value = action; // <-- SALAH
-  pendingSaveAction.value = action; // <-- PERBAIKI INI
-
-  confirmText.value = text;
-
-  // isConfirmDialogVisible.value = true; // <-- SALAH
-  confirmDialogVisible.value = true; // <-- PERBAIKI INI
+const handleRowClick = (event: PointerEvent, { item }: { item: RekeningHeader }) => {
+  if (selected.value.length > 0 && selected.value[0].NoRekening === item.NoRekening) {
+    selected.value = [];
+  } else {
+    selected.value = [item];
+  }
 };
-const executePendingAction = () => {
-  // if (pendingAction.value) pendingAction.value(); // <-- SALAH
-  if (pendingSaveAction.value) pendingSaveAction.value(); // <-- PERBAIKI INI
 
+// Logika dialog konfirmasi (Simpan & Batal)
+const showConfirmation = (action: () => Promise<void>, text: string) => {
+  pendingSaveAction.value = action;
+  confirmText.value = text;
+  confirmDialogVisible.value = true;
+};
+const executePendingAction = async () => {
+  if (pendingSaveAction.value) {
+    await pendingSaveAction.value();
+  }
   closeConfirmDialog();
 };
 
@@ -288,10 +301,10 @@ onMounted(() => {
 
     <template #header-actions>
       <v-btn v-if="canInsert" size="small" color="primary" @click="openNewDialog" prepend-icon="mdi-plus">Baru</v-btn>
-      <v-btn v-if="canEdit" size="small" :disabled="!isSingleSelected" @click="openEditDialog(selected[0])"
-        prepend-icon="mdi-pencil">Ubah</v-btn>
+      <v-btn v-if="canEdit" size="small" :disabled="!isSingleSelected"
+        @click="selectedItem && openEditDialog(selectedItem)" prepend-icon="mdi-pencil">Ubah</v-btn>
       <v-btn v-if="canDelete" size="small" color="error" :disabled="!isSingleSelected"
-        @click="confirmDelete(selected[0])" prepend-icon="mdi-delete">Hapus</v-btn>
+        @click="selectedItem && confirmDelete(selectedItem)" prepend-icon="mdi-delete">Hapus</v-btn>
       <v-btn v-if="hasViewPermission" size="small" color="green" @click="exportHeaderData"
         prepend-icon="mdi-file-excel">Export</v-btn>
     </template>
@@ -307,8 +320,9 @@ onMounted(() => {
 
       <div class="table-container">
         <v-data-table v-model="selected" :headers="masterHeaders" :items="headersData" :search="search"
-          :loading="isLoading" item-value="NoRekening" density="compact" class="desktop-table fill-height-table"
-          fixed-header show-select return-object :items-per-page="50">
+          :loading="isLoading" item-value="NoRekening" density="compact"
+          class="desktop-table fill-height-table colored-header" fixed-header show-select select-strategy="single"
+          return-object @click:row="handleRowClick" :items-per-page="50">
           <template #[`item.actions`]="{ item }">
             <v-tooltip text="Ubah Rekening" location="top">
               <template v-slot:activator="{ props }">
@@ -343,46 +357,43 @@ onMounted(() => {
       <p>Anda tidak memiliki izin untuk melihat Rekening Bank.</p>
     </div>
 
-    <v-dialog v-model="dialogVisible" persistent max-width="500px">
-      <v-card class="dialog-card">
-        <v-form ref="formRef" @submit.prevent="saveRekening">
-          <v-card-title class="dialog-header">
-            <span class="text-subtitle-1 font-weight-medium">
-              {{ isNewMode ? 'Tambah Rekening Baru' : `Ubah Rekening: ${editedItem.rek_nomor}` }}
+    <v-dialog v-model="dialogVisible" persistent max-width="480px">
+      <v-card class="dialog-card bg-grey-lighten-4 rounded-lg"> <v-form ref="formRef" @submit.prevent="saveRekening">
+          <v-card-title class="dialog-header bg-primary text-white pa-4">
+            <v-icon color="white" class="mr-2">mdi-bank-plus</v-icon>
+            <span class="text-h6 font-weight-bold">
+              {{ isNewMode ? 'Tambah Rekening' : 'Ubah Rekening' }}
             </span>
             <v-spacer></v-spacer>
-            <v-btn icon="mdi-close" variant="text" size="small" @click="closeDialog()"></v-btn>
+            <v-btn icon="mdi-close" variant="text" color="white" size="small" @click="closeDialog()"></v-btn>
           </v-card-title>
 
           <v-card-text class="pa-4">
-            <v-container>
+            <div class="bg-white pa-4 rounded-lg border elevation-1">
               <v-row dense>
                 <v-col cols="12">
-                  <v-text-field v-model="editedItem.rek_nomor" label="No. Rekening *"
-                    placeholder="Ketik No Rekening (lalu blur)" variant="outlined" density="compact"
-                    :rules="[requiredRule]" :readonly="!isNewMode || isCheckingKode" :loading="isCheckingKode"
-                    @blur="checkRekeningExists" hide-details="auto"></v-text-field>
+                  <v-text-field v-model="editedItem.rek_nomor" label="No. Rekening *" variant="outlined"
+                    density="compact" :rules="[requiredRule]" :readonly="!isNewMode || isCheckingKode" color="primary"
+                    @blur="checkRekeningExists" hide-details="auto" class="mb-3"></v-text-field>
                 </v-col>
-
                 <v-col cols="12">
                   <v-text-field v-model="editedItem.rek_namabank" label="Nama Bank *" variant="outlined"
-                    density="compact" :rules="[requiredRule]" hide-details="auto"></v-text-field>
+                    density="compact" :rules="[requiredRule]" color="primary" hide-details="auto"
+                    class="mb-3"></v-text-field>
                 </v-col>
-
                 <v-col cols="12">
                   <v-text-field v-model="editedItem.rek_atasnama" label="Atas Nama" variant="outlined" density="compact"
-                    hide-details="auto"></v-text-field>
+                    color="primary" hide-details="auto"></v-text-field>
                 </v-col>
               </v-row>
-            </v-container>
+            </div>
           </v-card-text>
 
-          <v-card-actions class="dialog-footer">
+          <v-card-actions class="pa-4 bg-white">
             <v-spacer></v-spacer>
-            <v-btn variant="text" @click="closeDialog()" :disabled="isSaving">Batal</v-btn>
-            <v-btn color="primary" type="submit" variant="elevated" :loading="isSaving"
-              :disabled="isSaving || isCheckingKode">
-              Simpan
+            <v-btn variant="text" color="grey" @click="closeDialog()">Batal</v-btn>
+            <v-btn color="primary" type="submit" variant="elevated" :loading="isSaving" :disabled="isCheckingKode">
+              Simpan Rekening
             </v-btn>
           </v-card-actions>
         </v-form>
@@ -452,15 +463,17 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Style standar browse (sama seperti Customer/Barcode) */
+/* Paksa Konsistensi Font 11px */
+.browse-content :deep(*),
+.dialog-card :deep(*) {
+  font-size: 11px !important;
+}
+
+/* Layout Dasar */
 .browse-content {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 120px);
-}
-
-.filter-section {
-  flex-shrink: 0;
 }
 
 .table-container {
@@ -470,60 +483,37 @@ onMounted(() => {
   border-radius: 4px;
 }
 
-.v-data-table {
-  height: 100%;
+/* Header Tabel Biru Primary */
+.colored-header :deep(thead th) {
+  background-color: #1976D2 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
+  height: 36px !important;
 }
 
-.v-data-table :deep(.v-table__wrapper) {
-  height: 100%;
-  overflow-y: auto;
+/* Checkbox Header Putih */
+.colored-header :deep(thead .v-checkbox-btn .v-selection-control__wrapper) {
+  color: white !important;
 }
 
-.state-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+/* Highlight Baris Dipilih */
+.desktop-table :deep(tr.v-data-table__selected) {
+  background-color: #E3F2FD !important;
 }
 
-/* Style standar dialog (sama seperti Customer) */
-.dialog-card {
-  font-size: 12px;
+/* Hover Effect */
+.desktop-table :deep(tbody tr:hover) {
+  cursor: pointer;
+  background-color: #f5f5f5 !important;
 }
 
+/* Dialog Header Custom */
 .dialog-header {
-  border-bottom: 1px solid #e0e0e0;
-  padding: 8px 16px;
-  background-color: #f5f5f5;
-  display: flex;
-  align-items: center;
+  border-bottom: 2px solid #0D47A1;
 }
 
-.dialog-footer {
-  border-top: 1px solid #e0e0e0;
-  padding: 8px 16px;
-  background-color: #f5f5f5;
-}
-
-.dialog-card :deep(.v-label) {
-  font-size: 11px !important;
-}
-
-.dialog-card :deep(input) {
-  font-size: 12px !important;
-}
-
-.dialog-card :deep(.v-input) {
-  margin-bottom: 4px;
-}
-
-.v-container {
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-.v-card-text {
-  padding-bottom: 0px !important;
+.elevation-1 {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
 }
 </style>

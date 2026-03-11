@@ -4,12 +4,12 @@
  * Automatically included in `./src/main.ts`
  */
 
-// Plugins
-import vuetify from './vuetify'
+import { createVuetify, type VuetifyOptions } from "vuetify";
+import vuetifyOptions from "./vuetify";
+import type { App } from "vue";
 
-// Types
-import type { App } from 'vue'
+export function registerPlugins(app: App) {
+  const vuetify = createVuetify(vuetifyOptions as VuetifyOptions);
 
-export function registerPlugins (app: App) {
-  app.use(vuetify)
+  app.use(vuetify);
 }

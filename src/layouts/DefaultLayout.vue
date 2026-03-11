@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/authStore';
 import Navbar from '@/components/Navbar.vue';
+import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue';
 
 const authStore = useAuthStore();
 </script>
@@ -35,5 +36,7 @@ const authStore = useAuthStore();
         <span class="text-medium-emphasis">© 2025 IT Kencana</span>
       </div>
     </v-footer>
+
+    <ChangePasswordDialog v-if="authStore.isAuthenticated" />
   </div>
 </template>

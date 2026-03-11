@@ -217,84 +217,71 @@ const targetChartOptions = ref({
 const currentTime = ref(new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'medium' }));
 let intervalId: number;
 
-// --- MOCK API CALLS ---
-// Kita akan isi dengan data tiruan agar halaman bisa tampil
 const fetchDashboardData = async () => {
+  // Set semua loading ke true di awal
   isLoadingStats.value = true;
-  isLoadingChart.value = true;
   isLoadingTransactions.value = true;
   isLoadingLowStock.value = true;
   isLoadingActions.value = true;
-  isLoadingTopProducts.value = true;
   isLoadingSalesTarget.value = true;
 
   try {
-    // Simulasikan penundaan API
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const res = await api.get('/dashboard/summary');
+    const data = res.data;
 
-    // Mock Stats
-    stats.value = {
-      todaySales: 4850000,
-      todayTransactions: 12,
-      lowStock: 3,
-      totalProducts: 150,
-    };
+    // Isi masing-masing state
+    stats.value = data.stats;
+    pendingActions.value = data.actions;
+    recentTransactions.value = data.recent;
+    lowStockProducts.value = data.lowStock;
+    lowStockCount.value = data.lowStock.length;
+    salesTargetSummary.value = data.target;
+
+    await fetchSalesChartData(); // Ambil data grafik
+  } catch (error) {
+    toast.error('Gagal memuat data dashboard.');
+  } finally {
+    // Matikan semua loading
     isLoadingStats.value = false;
+    isLoadingTransactions.value = false;
+    isLoadingLowStock.value = false;
+    isLoadingActions.value = false;
+    isLoadingSalesTarget.value = false;
+  }
+};
 
-    // Mock Sales Chart
-    const labels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    const data = [1200000, 1900000, 3000000, 2500000, 4800000, 5100000, 4850000];
+const fetchSalesChartData = async () => {
+  isLoadingChart.value = true;
+  try {
+    const res = await api.get('/dashboard/chart', {
+      params: {
+        start: chartFilters.startDate,
+        end: chartFilters.endDate
+      }
+    });
+
+    const labels = res.data.map((i: any) => format(new Date(i.tanggal), 'dd/MM'));
+    const values = res.data.map((i: any) => parseFloat(i.total));
+
     chartData.value = {
       labels: labels,
       datasets: [{
         label: 'Penjualan (Rp)',
         backgroundColor: '#42A5F5',
-        data: data,
+        data: values,
         borderRadius: 4
       }]
     };
-    isLoadingChart.value = false;
-
-    // Mock Pending Actions (Sesuaikan dengan Franchise)
-    pendingActions.value = [
-      { key: 'fsk_pending', title: 'Setoran Kasir Pending', icon: 'mdi-cash-multiple', to: '/transaksi/fsk', count: 1 },
-      { key: 'pembelian_open', title: 'Pembelian Belum Lunas', icon: 'mdi-cart-arrow-down', to: '/transaksi/pembelian', count: 2 },
-    ];
-    isLoadingActions.value = false;
-
-    // Mock Recent Transactions
-    recentTransactions.value = [
-      { id: 'TRX-001', customer: 'Customer A', time: '10:30', amount: 150000 },
-      { id: 'TRX-002', customer: 'Customer B', time: '10:35', amount: 300000 },
-    ];
-    isLoadingTransactions.value = false;
-
-    // Mock Low Stock
-    lowStockProducts.value = [
-      { KODE: 'P001', NAMA: 'Produk A', TOTAL: 5, Buffer: 10 },
-      { KODE: 'P002', NAMA: 'Produk B', TOTAL: 2, Buffer: 5 },
-      { KODE: 'P003', NAMA: 'Produk C', TOTAL: 8, Buffer: 10 },
-    ];
-    lowStockCount.value = lowStockProducts.value.length;
-    isLoadingLowStock.value = false;
-
-    // Mock Top Products
-    topProducts.value = [
-      { KODE: 'P002', NAMA: 'Produk B', TOTAL: 50 },
-      { KODE: 'P001', NAMA: 'Produk A', TOTAL: 45 },
-      { KODE: 'P003', NAMA: 'Produk C', TOTAL: 30 },
-    ];
-    isLoadingTopProducts.value = false;
-
-    // Mock Sales Target
-    salesTargetSummary.value = { nominal: 120500000, target: 150000000 };
-    isLoadingSalesTarget.value = false;
-
   } catch (error) {
-    toast.error('Gagal memuat data dashboard (mock).', { timeout: 3000 });
+    console.error('Gagal load chart');
+  } finally {
+    isLoadingChart.value = false;
   }
 };
-// --- AKHIR MOCK API CALLS ---
+
+watch([() => chartFilters.startDate, () => chartFilters.endDate], () => {
+  fetchSalesChartData();
+});
 
 onMounted(() => {
   if (authStore.isAuthenticated) {

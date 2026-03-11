@@ -145,7 +145,7 @@ watch(() => props.modelValue, (v) => { if (v) fetchData(); });
             </thead>
             <tbody>
               <tr v-for="(d, i) in printData.detail1" :key="i">
-                <td class="text-center">{{ i + 1 }}.</td>
+                <td class="text-center">{{ Number(i) + 1 }}.</td>
                 <td>{{ d.jenis }}</td>
                 <td class="text-center">{{ d.tgl_trf || '' }}</td>
                 <td class="text-center">{{ d.kdcus }}</td>

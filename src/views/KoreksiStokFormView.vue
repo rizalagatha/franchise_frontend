@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { VDataTableHeaders, VForm } from 'vuetify/components';
+import type { VForm } from 'vuetify/components'
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
 import { useToast } from 'vue-toastification';
@@ -46,6 +46,14 @@ interface LookupResultItem {
   ukuran: string;
   hpp: number | null;
   stok: number | null;
+}
+
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
 }
 
 // Tentukan mode
@@ -97,7 +105,7 @@ const isPrintConfirmDialogVisible = ref(false);
 const savedNomorForPrint = ref('');
 
 // Header Tabel Detail
-const tableHeaders: VDataTableHeaders = [
+const tableHeaders: TableHeader[] = [
   { title: '#', key: 'no', sortable: false, width: '40px' },
   { title: 'Kode Barang', key: 'kode', width: '120px' },
   { title: 'Nama Barang', key: 'nama', width: '300px' },
@@ -177,7 +185,10 @@ const processLookupResult = (itemResult: LookupResultItem, targetIndex: number) 
     toast.warning(`Barang ${itemResult.nama} (${itemResult.ukuran}) sudah ada di baris ${existingItemIndex + 1}.`);
     // Jika scan, tambahkan jumlah di baris yang ada?
     if (targetIndex === -1) { // -1 menandakan dari scan bar
-      items.value[existingItemIndex].jumlah = (items.value[existingItemIndex].jumlah || 0) + 1;
+      const existingItem = items.value[existingItemIndex]
+      if (existingItem) {
+        existingItem.jumlah = (existingItem.jumlah || 0) + 1
+      }
       toast.info(`Jumlah ${itemResult.nama} (${itemResult.ukuran}) ditambah 1.`);
     }
     return false; // Gagal tambah
@@ -197,7 +208,9 @@ const processLookupResult = (itemResult: LookupResultItem, targetIndex: number) 
     };
     items.value.push(rowToUpdate);
   } else { // Dari F1
-    rowToUpdate = items.value[targetIndex];
+    const target = items.value[targetIndex]
+    if (!target) return false
+    rowToUpdate = target
     // Isi data dari F1
     Object.assign(rowToUpdate, itemResult);
     rowToUpdate.jumlah = 0; // Default 0 untuk F1
@@ -858,6 +871,7 @@ onMounted(() => {
 .v-data-table :deep(input[type='number']) {
   text-align: right;
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .v-data-table :deep(input[type=number]::-webkit-inner-spin-button),

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components';
 import { format, subDays } from 'date-fns';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
@@ -30,6 +29,16 @@ interface FskDetail {
   NominalSetor: number;
 }
 
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  minWidth?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
+  fixed?: boolean
+}
+
 // --- State ---
 const headersData = ref<FskHeader[]>([]);
 const detailsData = ref<Record<string, FskDetail[]>>({});
@@ -55,7 +64,7 @@ const canDelete = computed(() => authStore.can(MENU_ID, 'delete'));
 const isSingleSelected = computed(() => selected.value.length === 1);
 
 // Table Headers Master
-const masterHeaders: VDataTableHeaders = [
+const masterHeaders: TableHeader[] = [
   { title: 'Nomor', key: 'Nomor', width: '180px', fixed: true },
   { title: 'Tgl Setor', key: 'TglSetor', width: '120px' },
   { title: 'Kasir', key: 'Kasir', minWidth: '150px' },
@@ -64,7 +73,7 @@ const masterHeaders: VDataTableHeaders = [
   { title: '', key: 'data-table-expand', width: '50px', align: 'end' },
 ];
 
-const detailHeaders: VDataTableHeaders = [
+const detailHeaders: TableHeader[] = [
   { title: 'Jenis Setoran', key: 'Jenis', minWidth: '200px' },
   { title: 'Nominal Setor', key: 'NominalSetor', align: 'end', width: '150px' },
 ];
@@ -126,11 +135,14 @@ const confirmDelete = async () => {
 };
 
 const handlePrint = () => {
-  if (selected.value.length > 0) {
-    printNomor.value = selected.value[0].Nomor;
-    showPrintModal.value = true;
-  }
-};
+  if (!selected.value.length) return
+
+  const item = selected.value[0]
+  if (!item) return
+
+  printNomor.value = item.Nomor
+  showPrintModal.value = true
+}
 
 onMounted(() => { if (hasViewPermission.value) fetchHeadersData(); });
 </script>
@@ -141,7 +153,7 @@ onMounted(() => { if (hasViewPermission.value) fetchHeadersData(); });
       <v-btn v-if="canInsert" size="small" color="primary" prepend-icon="mdi-plus"
         @click="router.push('/transaksi/fsk/baru')">Baru</v-btn>
       <v-btn v-if="canEdit" size="small" :disabled="!isSingleSelected" prepend-icon="mdi-pencil"
-        @click="router.push(`/transaksi/fsk/ubah/${selected[0].Nomor}`)">Ubah</v-btn>
+        @click="router.push(`/transaksi/fsk/ubah/${selected[0]?.Nomor}`)">Ubah</v-btn>
       <v-btn size="small" color="secondary" :disabled="!isSingleSelected" prepend-icon="mdi-printer"
         @click="handlePrint">Cetak</v-btn>
       <v-btn v-if="canDelete" size="small" color="error" :disabled="!isSingleSelected" prepend-icon="mdi-delete"
@@ -163,7 +175,7 @@ onMounted(() => { if (hasViewPermission.value) fetchHeadersData(); });
         <v-data-table v-model="selected" v-model:expanded="expanded" :headers="masterHeaders" :items="headersData"
           :search="search" :loading="isLoadingHeaders" item-value="Nomor" show-select show-expand
           select-strategy="single" density="compact" fixed-header class="desktop-table fill-height-table"
-          @click:row="(e, { item }) => selected = [item]"
+          @click:row="(_: MouseEvent, { item }: { item: FskHeader }) => selected = [item]"
           @update:expanded="(val) => { if (val.length > 0) loadDetails({ item: { Nomor: val[val.length - 1] } }) }">
           <template #[`item.TglSetor`]="{ value }">
             {{ value ? format(new Date(value), 'dd/MM/yyyy') : '-' }}

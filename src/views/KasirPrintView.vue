@@ -112,7 +112,7 @@ onMounted(() => {
         </thead>
         <tbody>
           <tr v-for="(item, index) in printData?.details" :key="index">
-            <td class="text-center">{{ index + 1 }}</td>
+            <td class="text-center">{{ Number(index) + 1 }}</td>
             <td>{{ item.kode }}</td>
             <td>{{ item.nama }}</td>
             <td class="text-center">{{ item.ukuran }}</td>

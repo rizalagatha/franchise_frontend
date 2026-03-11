@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
@@ -7,6 +7,9 @@ import { useToast } from 'vue-toastification';
 import { useAuthStore } from '@/stores/authStore';
 import { format } from 'date-fns';
 import { formatRupiah } from '@/utils/formatRupiah';
+import CustomerSearchModal from '@/components/lookup/CustomerSearchModal.vue';
+import BankSearchModal from '@/components/lookup/BankSearchModal.vue';
+import SetoranPembayaranPrintModal from '@/components/SetoranPembayaranPrintModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -19,6 +22,11 @@ const isEditMode = computed(() => !!route.params.nomor);
 const isSaving = ref(false);
 const isLoading = ref(false);
 const showConfirmDialog = ref(false);
+const showCusModal = ref(false);
+const showBankModal = ref(false);
+const showPrintModal = ref(false);
+const savedInvoiceNomor = ref('');
+const showCancelDialog = ref(false);
 
 const formHeader = ref({
   sh_nomor: '',
@@ -34,7 +42,7 @@ const formHeader = ref({
   rek_namabank: '',
   sh_tgltransfer: format(new Date(), 'yyyy-MM-dd'),
   sh_ket: '',
-  user_create: authStore.user?.user_kode || '',
+  user_create: authStore.user?.kode || '',
 });
 
 // Detail items (Equivalent to CDS in Delphi)
@@ -100,8 +108,28 @@ const fetchUnpaidInvoices = async () => {
   }
 };
 
+// --- Handler Customer (Data dari Kode, Nama, Alamat, Kota) ---
+const onCustomerSelected = (cus: any) => {
+  formHeader.value.sh_cus_kode = cus.Kode;
+  formHeader.value.cus_nama = cus.Nama;
+  formHeader.value.cus_alamat = cus.Alamat;
+  formHeader.value.cus_kota = cus.Kota;
+  // Langsung tarik piutang setelah pilih customer
+  fetchUnpaidInvoices();
+};
+
+// --- Handler Bank (Data dari NoRekening, NamaBank) ---
+const onBankSelected = (bank: any) => {
+  formHeader.value.sh_norek = bank.NoRekening;
+  formHeader.value.rek_namabank = bank.NamaBank;
+};
+
 const handleLunasiChange = (index: number) => {
   const item = items.value[index];
+
+  // Tambahkan guard clause untuk memastikan item ada [cite: 2026-03-09]
+  if (!item) return;
+
   if (item.lunasi) {
     // Logika lunasi: Ambil nilai terkecil antara sisa piutang atau sisa setoran yang tersedia
     const available = sisaSetoran.value + Number(item.bayar);
@@ -129,20 +157,137 @@ const executeSave = async () => {
       details: items.value.filter(i => i.bayar > 0),
       isNew: !isEditMode.value
     };
-    await api.post('/setoran-pembayaran/save', payload);
+    const response = await api.post('/setoran-pembayaran/save', payload);
+
+    // Ambil nomor dari respons backend (saat insert otomatis) atau state (saat edit)
+    savedInvoiceNomor.value = response.data.nomor || formHeader.value.sh_nomor;
+
     toast.success('Data setoran berhasil disimpan.');
-    router.push('/transaksi/setoran-pembayaran');
+    showConfirmDialog.value = false; // Tutup dialog konfirmasi simpan
+
+    // LOGIKA DELPHI: Cetak otomatis hanya untuk setoran TUNAI (jenis === 0)
+    if (formHeader.value.sh_jenis === 0) {
+      await nextTick();
+      showPrintModal.value = true; // Buka modal print
+    } else {
+      // Jika TRANSFER, langsung kembali ke halaman browse
+      router.push('/transaksi/setoran-pembayaran');
+    }
   } catch (error: any) {
     toast.error(error.response?.data?.message || 'Gagal menyimpan data.');
   } finally {
     isSaving.value = false;
-    showConfirmDialog.value = false;
   }
 };
 
+const onPrintModalClosed = () => {
+  showPrintModal.value = false;
+  router.push('/transaksi/setoran-pembayaran'); // Kembali ke browse setelah selesai cetak
+};
+
+const fetchEditData = async () => {
+  isLoading.value = true;
+  try {
+    const nomor = route.params.nomor;
+    const res = await api.get(`/setoran-pembayaran/${nomor}/form-data`);
+
+    // 1. Map Header
+    formHeader.value = {
+      ...res.data.header,
+      sh_nominal: Number(res.data.header.sh_nominal),
+      // Pastikan format tanggal sesuai input type="date"
+      sh_tanggal: format(new Date(res.data.header.sh_tanggal), 'yyyy-MM-dd'),
+      sh_tgltransfer: res.data.header.sh_tgltransfer ? format(new Date(res.data.header.sh_tgltransfer), 'yyyy-MM-dd') : ''
+    };
+
+    // 2. Map Details
+    items.value = res.data.details.map((d: any) => ({
+      invoice: d.invoice,
+      tanggal: d.tanggal,
+      nominal: Number(d.nominal),
+      terbayar: Number(d.terbayar),
+      sisa_piutang: Number(d.sisa_piutang),
+      bayar: Number(d.bayar),
+      lunasi: false, // Default false saat load
+      tglbayar: d.tglbayar,
+      ket: d.ket,
+      angsur: d.angsur
+    }));
+
+    await nextTick();
+    toast.info(`Memuat data ${nomor}`);
+  } catch (error: any) {
+    toast.error("Gagal memuat data: " + (error.response?.data?.message || error.message));
+    router.push('/transaksi/setoran-pembayaran');
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// --- Fungsi Tambah PLL ---
+const handleF2 = (event: KeyboardEvent) => {
+  if (event.key === 'F2') {
+    event.preventDefault();
+    tambahPLL();
+  }
+};
+
+const tambahPLL = () => {
+  if (!formHeader.value.sh_cus_kode) {
+    return toast.warning('Pilih customer terlebih dahulu.');
+  }
+  if (sisaSetoran.value <= 0) {
+    return toast.warning('Tidak ada sisa setoran untuk dijadikan PLL.');
+  }
+
+  if (confirm(`Jadikan sisa setoran (${formatRupiah(sisaSetoran.value)}) sebagai PLL?`)) {
+    items.value.push({
+      invoice: 'PLL',
+      tanggal: formHeader.value.sh_tanggal,
+      nominal: 0,
+      terbayar: 0,
+      sisa_piutang: 0,
+      bayar: sisaSetoran.value, // Otomatis ambil sisa setoran
+      lunasi: true,
+      tglbayar: formHeader.value.sh_tanggal,
+      ket: 'Penerimaan Lain-Lain',
+      angsur: format(new Date(), 'yyyyMMddHHmmss')
+    });
+    toast.success('Baris PLL berhasil ditambahkan.');
+  }
+};
+
+const removeItem = (index: number) => {
+  items.value.splice(index, 1);
+  toast.success('Baris tagihan dihapus.');
+};
+
+// Fitur 2: Fungsi untuk menampilkan konfirmasi batal
+const handleCancel = () => {
+  showCancelDialog.value = true;
+};
+
+// Fungsi eksekusi batal
+const executeCancel = () => {
+  showCancelDialog.value = false;
+  router.back();
+};
+
+// Tambahkan Event Listener Keyboard
+onMounted(() => {
+  window.addEventListener('keydown', handleF2);
+  if (isEditMode.value) {
+    fetchEditData();
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleF2);
+});
+
 onMounted(() => {
   if (isEditMode.value) {
-    // Logic fetch data edit akan ditambahkan di sini
+    fetchEditData();
   }
 });
 </script>
@@ -151,8 +296,11 @@ onMounted(() => {
   <PageLayout :title="isEditMode ? 'Ubah Setoran Pembayaran' : 'Input Setoran Pembayaran'" desktop-mode
     icon="mdi-cash-register">
     <template #header-actions>
+      <div class="text-caption text-grey mr-4 d-flex align-center">
+        <v-kbd>F2</v-kbd> <span class="ml-1">Jadikan PLL</span>
+      </div>
       <v-btn color="primary" @click="handleSave" :loading="isSaving" prepend-icon="mdi-content-save">Simpan</v-btn>
-      <v-btn variant="outlined" @click="router.back()">Batal</v-btn>
+      <v-btn variant="outlined" @click="handleCancel">Batal</v-btn>
     </template>
 
     <div class="setor-wrapper">
@@ -165,8 +313,9 @@ onMounted(() => {
 
           <div class="d-flex align-center mb-2">
             <v-text-field v-model="formHeader.sh_cus_kode" label="Customer" density="compact" hide-details
-              variant="outlined" @keyup.f1="() => { }" @blur="fetchCustomer" />
-            <v-btn icon="mdi-magnify" size="x-small" variant="tonal" color="primary" class="ml-1"></v-btn>
+              variant="outlined" @keyup.f1="showCusModal = true" @blur="fetchCustomer" />
+            <v-btn icon="mdi-magnify" size="x-small" variant="tonal" color="primary" class="ml-1"
+              @click="showCusModal = true"></v-btn>
           </div>
 
           <v-text-field v-model="formHeader.cus_nama" label="Nama" readonly density="compact" hide-details
@@ -183,10 +332,16 @@ onMounted(() => {
             density="compact" hide-details variant="outlined" class="mb-2" />
 
           <div v-if="formHeader.sh_jenis === 1" class="bg-blue-lighten-5 pa-2 rounded mb-2 border">
-            <v-text-field v-model="formHeader.sh_norek" label="No. Rekening" density="compact" hide-details
-              variant="outlined" class="mb-2" />
+            <div class="d-flex align-center mb-2">
+              <v-text-field v-model="formHeader.sh_norek" label="No. Rekening" density="compact" hide-details
+                variant="outlined" @keyup.f1="showBankModal = true" />
+              <v-btn icon="mdi-magnify" size="x-small" variant="tonal" color="primary" class="ml-1"
+                @click="showBankModal = true"></v-btn>
+            </div>
+
             <v-text-field v-model="formHeader.rek_namabank" label="Bank" readonly density="compact" hide-details
               variant="filled" class="mb-2" />
+
             <v-text-field v-model="formHeader.sh_tgltransfer" label="Tgl Transfer" type="date" density="compact"
               hide-details variant="outlined" />
           </div>
@@ -224,6 +379,7 @@ onMounted(() => {
                 <th width="140" class="text-right">Bayar</th>
                 <th width="80" class="text-center">Lunasi</th>
                 <th>Keterangan</th>
+                <th width="50" class="text-center">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -244,6 +400,10 @@ onMounted(() => {
                 <td>
                   <v-text-field v-model="item.ket" density="compact" hide-details variant="plain" placeholder="..." />
                 </td>
+                <td class="text-center">
+                  <v-btn icon="mdi-delete" size="x-small" color="error" variant="text"
+                    @click="removeItem(index)"></v-btn>
+                </td>
               </tr>
               <tr v-if="items.length === 0">
                 <td colspan="8" class="text-center pa-10 text-grey italic">Pilih customer untuk melihat daftar piutang.
@@ -254,6 +414,13 @@ onMounted(() => {
         </v-card>
       </main>
     </div>
+
+    <CustomerSearchModal v-model="showCusModal" @customer-selected="onCustomerSelected" />
+
+    <BankSearchModal v-model="showBankModal" @bank-selected="onBankSelected" />
+
+    <SetoranPembayaranPrintModal v-model="showPrintModal" :nomor="savedInvoiceNomor"
+      @update:modelValue="(val) => !val && onPrintModalClosed()" />
 
     <v-dialog v-model="showConfirmDialog" max-width="400px">
       <v-card class="rounded-lg">
@@ -267,6 +434,23 @@ onMounted(() => {
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showConfirmDialog = false">Batal</v-btn>
           <v-btn color="primary" variant="elevated" @click="executeSave" :loading="isSaving">Ya, Simpan</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="showCancelDialog" max-width="400px">
+      <v-card class="rounded-lg">
+        <v-card-title class="text-h6 pa-4 d-flex align-center">
+          <v-icon color="warning" class="mr-2">mdi-alert</v-icon>
+          Konfirmasi Batal
+        </v-card-title>
+        <v-card-text class="pa-4 pt-0">
+          Yakin ingin membatalkan? Semua data yang sudah Anda ketik tidak akan disimpan.
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showCancelDialog = false">Tidak</v-btn>
+          <v-btn color="error" variant="elevated" @click="executeCancel">Ya, Batal</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

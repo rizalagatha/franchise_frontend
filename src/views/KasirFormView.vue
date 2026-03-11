@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { VDataTableHeaders } from 'vuetify/components';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
 import CustomerSearchModal from '@/components/lookup/CustomerSearchModal.vue';
@@ -27,10 +26,20 @@ interface InvoiceItem {
   barcode: string;
   nama: string;
   ukuran: string;
+  stok: number;
   jumlah: number | null;
   harga: number | null;
+  hpp: number;
   diskon: number | null;
   total: number;
+}
+
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  align?: 'start' | 'center' | 'end'
+  sortable?: boolean
 }
 
 const isEditMode = computed(() => !!route.params.nomor);
@@ -48,6 +57,9 @@ const formHeader = ref({
   rpTunai: 0,
   rpCard: 0,
   noRek: '',
+  namaBank: '',
+  pundiAmal: 0,
+  kembalian: 0,
   keterangan: '',
 });
 
@@ -72,11 +84,12 @@ const confirmTitle = ref('Konfirmasi');
 const isConfirmOnly = ref(false); // Jika true, hanya muncul tombol OK (mode warning)
 
 // Header Tabel Detail
-const tableHeaders: VDataTableHeaders = [
+const tableHeaders: TableHeader[] = [
   { title: '#', key: 'no', sortable: false, width: '40px' },
   { title: 'Barcode', key: 'barcode', width: '130px' },
   { title: 'Nama Barang', key: 'nama', width: '300px' },
   { title: 'Size', key: 'ukuran', align: 'center', width: '80px' },
+  { title: 'Stok', key: 'stok', align: 'end', width: '80px' },
   { title: 'Qty', key: 'jumlah', align: 'end', width: '100px' },
   { title: 'Harga', key: 'harga', align: 'end', width: '120px' },
   { title: 'Disc', key: 'diskon', align: 'end', width: '100px' },
@@ -122,6 +135,12 @@ const formatCurrency = (v: number) => new Intl.NumberFormat('id-ID', { style: 'c
 const handleGlobalKeyDown = (event: KeyboardEvent) => {
   if (event.key === 'F1') {
     event.preventDefault();
+
+    // Tambahkan validasi customer di sini
+    if (!formHeader.value.kdCus) {
+      return toast.warning('Pilih customer dulu sebelum mencari barang.');
+    }
+
     isItemLookupVisible.value = true;
   }
 };
@@ -142,6 +161,11 @@ const fetchInitialData = async () => {
 
 const onScanBarcode = async () => {
   if (!scanBarcode.value.trim() || isLookupLoading.value) return;
+  if (!formHeader.value.kdCus) {
+    toast.warning('Pilih customer dulu!');
+    scanBarcode.value = '';
+    return;
+  }
   const barcode = scanBarcode.value.trim();
   isLookupLoading.value = true;
 
@@ -162,8 +186,10 @@ const onScanBarcode = async () => {
       barcode: res.barcode,
       nama: res.nama,
       ukuran: res.ukuran,
+      stok: res.stok || 0,
       jumlah: 1,
       harga: res.jual,
+      hpp: res.hpp || 0,
       diskon: 0,
       total: res.jual,
     });
@@ -182,7 +208,7 @@ const onItemSelected = (selectedItem: any) => {
   const existing = items.value.find(i => i.barcode === selectedItem.barcode || i.kode === selectedItem.kode);
 
   if (existing) {
-    existing.jumlah++;
+    existing.jumlah = (existing.jumlah ?? 0) + 1;
     toast.info(`Jumlah ${selectedItem.nama} ditambah.`);
   } else {
     items.value.unshift({
@@ -191,8 +217,10 @@ const onItemSelected = (selectedItem: any) => {
       barcode: selectedItem.barcode || '',
       nama: selectedItem.nama,
       ukuran: selectedItem.ukuran || '',
+      stok: selectedItem.stok || 0,
       jumlah: 1,
       harga: selectedItem.harga || selectedItem.hpp || 0, // Fallback ke HPP jika harga jual null
+      hpp: selectedItem.hpp || 0,
       diskon: 0,
       total: selectedItem.harga || selectedItem.hpp || 0
     });
@@ -265,7 +293,13 @@ const openPayment = () => {
   if (items.value.length === 0) return toast.error('Barang masih kosong!');
   if (!formHeader.value.kdCus) return toast.error('Pilih customer dulu!');
 
-  // Sesuai alur Delphi: Cek jika bayar kosong beri peringatan
+  // --- VALIDASI STOK (DELPHI LOGIC) ---
+  const overStockItem = items.value.find(item => (item.jumlah || 0) > item.stok);
+  if (overStockItem) {
+    return toast.error(`Stok tidak cukup untuk: ${overStockItem.nama} (${overStockItem.ukuran}). Sisa stok: ${overStockItem.stok}`);
+  }
+  // ------------------------------------
+
   showPaymentModal.value = true;
 };
 
@@ -369,8 +403,14 @@ onUnmounted(() => {
           <div class="d-flex align-center">
             <v-text-field v-model="scanBarcode" placeholder="Scan barcode di sini... (F1 untuk bantuan)"
               prepend-inner-icon="mdi-barcode-scan" variant="plain" hide-details
-              class="px-4 py-1 barcode-scanner flex-grow-1" autofocus />
-            <v-btn variant="text" color="primary" icon="mdi-text-search" @click="isItemLookupVisible = true"></v-btn>
+              class="px-4 py-1 barcode-scanner flex-grow-1" autofocus @keyup.enter="onScanBarcode" />
+            <v-btn variant="text" color="primary" icon="mdi-text-search" @click="() => {
+              if (!formHeader.value.kdCus) {
+                toast.warning('Pilih customer dulu sebelum mencari barang.');
+              } else {
+                isItemLookupVisible = true;
+              }
+            }"></v-btn>
           </div>
         </v-card>
 
@@ -378,13 +418,20 @@ onUnmounted(() => {
           <v-data-table :headers="tableHeaders" :items="items" density="compact" class="fill-height-table" fixed-header
             :items-per-page="-1">
             <template #[`item.no`]="{ index }">{{ index + 1 }}</template>
-            <template #[`item.jumlah`]="{ item }"><v-text-field v-model.number="item.jumlah" type="number"
-                variant="underlined" density="compact" hide-details class="text-end" /></template>
+            <template #[`item.stok`]="{ item }">
+              <div :class="(item.stok - (item.jumlah || 0)) < 0 ? 'text-error font-weight-bold' : ''">
+                {{ item.stok }}
+              </div>
+            </template>
+            <template #[`item.jumlah`]="{ item }">
+              <v-text-field v-model.number="item.jumlah" type="number" variant="underlined" density="compact"
+                hide-details class="text-end" :color="(item.jumlah || 0) > item.stok ? 'error' : 'primary'" />
+            </template>
             <template #[`item.harga`]="{ value }">{{ formatCurrency(value) }}</template>
             <template #[`item.diskon`]="{ item }"><v-text-field v-model.number="item.diskon" type="number"
                 variant="underlined" density="compact" hide-details class="text-end" /></template>
-            <template #[`item.total`]="{ item }"><span class="font-weight-bold">{{ formatCurrency(item.jumlah *
-              (item.harga - item.diskon)) }}</span></template>
+            <template #[`item.total`]="{ item }"><span class="font-weight-bold">{{ formatCurrency((item.jumlah ?? 0) *
+              ((item.harga ?? 0) - (item.diskon ?? 0))) }}</span></template>
             <template #[`item.actions`]="{ item }"><v-icon size="small" color="error"
                 @click="items = items.filter(i => i.id !== item.id)">mdi-delete</v-icon></template>
             <template #bottom></template>
@@ -395,7 +442,7 @@ onUnmounted(() => {
 
     <CustomerSearchModal v-model="showCustomerModal" @customer-selected="onCustomerSelected" />
     <BankSearchModal v-model="showBankModal" @bank-selected="onBankSelected" />
-    <ItemLookupModal v-model="isItemLookupVisible" source="cetak-barcode" @item-selected="onItemSelected" />
+    <ItemLookupModal v-model="isItemLookupVisible" source="kasir" @item-selected="onItemSelected" />
     <PaymentModal v-model="showPaymentModal" :total-invoice="grandTotal" @confirm-payment="handleFinalSave" />
     <KasirPrintPreviewModal v-model="showPrintModal" :nomor-invoice="savedInvoiceNomor"
       @update:modelValue="(val) => !val && onPrintModalClosed()" />

@@ -47,7 +47,7 @@ const detailsData = ref<{ [key: string]: KoreksiDetail[] }>({});
 const selected = ref<KoreksiHeader[]>([]);
 const isLoadingHeaders = ref(true);
 const loadingDetails = ref<Set<string>>(new Set());
-const expanded = ref<KoreksiHeader[]>([]);
+const expanded = ref<string[]>([]);
 const search = ref('');
 
 // State Filter Tanggal (Default 1 minggu terakhir)
@@ -82,18 +82,18 @@ const formatNumber = (value: number | null | undefined): string => {
 };
 
 // Header Tabel Master (Sesuai Delphi)
-const masterHeaders: VDataTableHeaders = [
+const masterHeaders: any[] = [ // Ganti ke any[] untuk menghindari konflik tipe internal
   { title: 'Nomor', key: 'Nomor', width: '180px' },
   { title: 'Tanggal', key: 'Tanggal', width: '120px' },
   { title: 'Nominal', key: 'Nominal', align: 'end', width: '150px' },
   { title: 'Keterangan', key: 'Keterangan', minWidth: '250px' },
   { title: 'Created', key: 'Created', width: '120px' },
   { title: 'Modified', key: 'Modified', width: '120px' },
-  { title: '', key: 'data-table-expand', width: '40px', align: 'end' as const },
+  { title: '', key: 'data-table-expand', width: '40px', align: 'end' },
 ];
 
 // Header Tabel Detail (Sesuai Delphi)
-const detailHeaders: VDataTableHeaders = [
+const detailHeaders: any[] = [
   { title: 'Kode', key: 'Kode', width: '120px' },
   { title: 'Nama Barang', key: 'Nama', width: '300px' },
   { title: 'Ukuran', key: 'Ukuran', align: 'center', width: '80px' },
@@ -131,30 +131,31 @@ const fetchDetailsData = async (nomor: string) => {
     detailsData.value[nomor] = response.data;
   } catch (error) {
     toast.error(`Gagal memuat detail untuk nomor ${nomor}.`);
-    expanded.value = expanded.value.filter(h => h.Nomor !== nomor);
+    // PERBAIKAN: Bandingkan h langsung sebagai string [cite: 2026-03-09]
+    expanded.value = expanded.value.filter(h => h !== nomor);
   } finally {
     loadingDetails.value.delete(nomor);
   }
 };
 
 // Watcher untuk memuat detail
-watch(expanded, (newExpandedItems) => {
-  const newItem = newExpandedItems.find(item =>
-    !detailsData.value[item.Nomor] &&
-    !loadingDetails.value.has(item.Nomor)
-  );
-  if (newItem) {
-    fetchDetailsData(newItem.Nomor);
+watch(expanded, (newExpandedIds) => {
+  if (newExpandedIds.length > 0) {
+    const lastNomor = newExpandedIds[newExpandedIds.length - 1];
+
+    // PERBAIKAN: Gunakan guard 'if (lastNomor)' untuk memastikan tipe data adalah string [cite: 2026-03-09]
+    if (lastNomor && !detailsData.value[lastNomor] && !loadingDetails.value.has(lastNomor)) {
+      fetchDetailsData(lastNomor);
+    }
   }
 }, { deep: true });
-
 // Navigasi
 const openNewForm = () => {
   router.push({ name: 'KoreksiStokBaru' });
 };
 const openEditForm = (item?: KoreksiHeader) => {
   const itemToEdit = item || selected.value[0];
-  if (!itemToEdit) return;
+  if (!itemToEdit) return; // Guard clause jika undefined
   router.push({
     name: 'KoreksiStokUbah',
     params: { nomor: itemToEdit.Nomor }
@@ -209,7 +210,10 @@ const exportDetailData = () => {
   if (!isSingleSelected.value) {
     return toast.warning('Pilih satu header koreksi untuk mengekspor detailnya.');
   }
-  const selectedNomor = selected.value[0].Nomor;
+  const target = selected.value[0];
+  if (!target) return; // Type Guard
+
+  const selectedNomor = target.Nomor;
   const detailToExport = detailsData.value[selectedNomor];
 
   if (!detailToExport || detailToExport.length === 0) {
@@ -240,12 +244,12 @@ const exportDetailData = () => {
 
 // Cetak (Placeholder)
 const printData = () => {
-  if (!isSingleSelected.value) {
+  const target = selected.value[0];
+  if (!isSingleSelected.value || !target) {
     toast.warning("Pilih satu data koreksi untuk dicetak.");
     return;
   }
-  const nomor = selected.value[0].Nomor;
-  handlePrint(nomor); // Panggil handler
+  handlePrint(target.Nomor);
 };
 
 const handlePrint = async (nomor: string) => {
@@ -426,9 +430,8 @@ watch([startDate, endDate], (newDates, oldDates) => {
                         class="me-2"></v-progress-circular>
                       Memuat detail...
                     </div>
-                    <v-data-table v-else-if="detailsData[item.Nomor] && detailsData[item.Nomor].length"
-                      :headers="detailHeaders" :items="detailsData[item.Nomor]" density="compact" class="detail-table"
-                      :items-per-page="-1">
+                    <v-data-table v-else-if="item?.Nomor && detailsData[item.Nomor]?.length" :headers="detailHeaders"
+                      :items="detailsData[item.Nomor]" density="compact" class="detail-table" :items-per-page="-1">
                       <!-- Format Angka -->
                       <template #[`item.Stok`]="{ value }">{{ formatNumber(value) }}</template>
                       <template #[`item.Jumlah`]="{ value }">{{ formatNumber(value) }}</template>

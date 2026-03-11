@@ -1,14 +1,25 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components';
 import api from '@/services/api';
 import { useToast } from 'vue-toastification';
 
 interface CustomerItem {
-  cus_kode: string;
-  cus_nama: string;
-  cus_alamat: string;
-  cus_kota: string;
+  Kode: string
+  Nama: string
+  Alamat: string
+  Kota: string
+  Telp?: string
+  Nama_Kontak?: string
+  Aktif?: string
+  Created?: string
+  Modified?: string
+}
+
+type TableHeader = {
+  title: string
+  key: string // Gunakan 'key', bukan 'value'
+  width?: string
+  minWidth?: string
 }
 
 const props = defineProps<{ modelValue: boolean }>();
@@ -19,19 +30,26 @@ const items = ref<CustomerItem[]>([]);
 const loading = ref(false);
 const search = ref('');
 
-const headers: VDataTableHeaders = [
-  { title: 'Kode', key: 'Kode', width: '120px' }, // Gunakan 'Kode' bukan 'cus_kode'
-  { title: 'Nama Pelanggan', key: 'Nama', minWidth: '200px' }, // Gunakan 'Nama'
-  { title: 'Alamat', key: 'Alamat' }, // Gunakan 'Alamat'
-  { title: 'Kota', key: 'Kota', width: '120px' }, // Gunakan 'Kota'
-];
+const headers: TableHeader[] = [
+  { title: 'Kode', key: 'Kode', width: '120px' },
+  { title: 'Nama Pelanggan', key: 'Nama', minWidth: '200px' },
+  { title: 'Alamat', key: 'Alamat' },
+  { title: 'Kota', key: 'Kota', width: '120px' },
+]
 
 const loadCustomers = async () => {
   loading.value = true;
   try {
-    // Menggunakan endpoint customer yang sudah ada
     const response = await api.get('/customers');
-    items.value = response.data;
+    // Backend mengembalikan "Kode", "Nama", dll. Bukan "cus_kode"
+    items.value = response.data.map((c: any) => ({
+      Kode: c.Kode,
+      Nama: c.Nama,
+      Alamat: c.Alamat,
+      Kota: c.Kota,
+      // Tambahkan property lain jika dibutuhkan oleh form kasir
+      Telp: c.Telp
+    }));
   } catch (err) {
     toast.error('Gagal memuat data customer.');
   } finally {
@@ -39,8 +57,13 @@ const loadCustomers = async () => {
   }
 };
 
+const handleRowClick = (event: PointerEvent, { item }: { item: CustomerItem }) => {
+  selectItem(item);
+};
+
 const selectItem = (item: any) => {
-  // item sekarang berisi { Kode, Nama, Alamat, Kota, ... }
+  if (!item) return;
+  console.log("Customer dipilih:", item);
   emit('customer-selected', item);
   emit('update:modelValue', false);
 };
@@ -68,8 +91,8 @@ watch(() => props.modelValue, (val) => {
           prepend-inner-icon="mdi-magnify" hide-details class="mb-4" autofocus></v-text-field>
 
         <v-data-table :headers="headers" :items="items" :search="search" :loading="loading" item-value="Kode" hover
-          density="compact" fixed-header class="desktop-table flex-grow-1"
-          @click:row="(e, { item }) => selectItem(item)">
+          density="compact" fixed-header class="desktop-table flex-grow-1" style="cursor: pointer"
+          @click:row="handleRowClick">
         </v-data-table>
       </v-card-text>
     </v-card>

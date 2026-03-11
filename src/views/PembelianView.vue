@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import type { VDataTableHeaders } from 'vuetify/components';
 import { format, subDays } from 'date-fns';
 import api from '@/services/api';
 import PageLayout from '@/components/PageLayout.vue';
@@ -18,14 +17,14 @@ const MENU_ID = '22';
 
 // Interface Data Header
 interface PembelianHeader {
-  Nomor: string;
-  Tanggal: string;
-  NoInvoice: string;
-  TglInvoice: string;
-  'Nominal Pembelian': number;
-  Keterangan: string;
-  Created: string;
-  Modified: string;
+  Nomor: string
+  Tanggal: string
+  NoInvoice: string
+  TglInvoice: string
+  NominalPembelian: number
+  Keterangan: string
+  Created: string
+  Modified: string
 }
 
 // Interface Data Detail
@@ -39,13 +38,21 @@ interface PembelianDetail {
   Total: number;
 }
 
+type TableHeader = {
+  title: string
+  key: string
+  width?: string
+  minWidth?: string
+  align?: 'start' | 'center' | 'end'
+}
+
 // --- State ---
 const headersData = ref<PembelianHeader[]>([]);
 const detailsData = ref<{ [key: string]: PembelianDetail[] }>({});
 const selected = ref<PembelianHeader[]>([]);
 const isLoadingHeaders = ref(true);
 const loadingDetails = ref<Set<string>>(new Set());
-const expanded = ref<PembelianHeader[]>([]); // v-model (pakai return-object)
+const expanded = ref<PembelianHeader[]>([]);
 const search = ref(''); // Untuk search client-side di tabel header
 
 // State Filter Tanggal (Default 1 minggu terakhir)
@@ -76,25 +83,18 @@ const formatNumber = (value: number | null | undefined): string => {
 
 
 // Header Tabel Master (Header Pembelian)
-const masterHeaders: VDataTableHeaders = [
+const masterHeaders: TableHeader[] = [
   { title: 'Nomor', key: 'Nomor', width: '180px' },
   { title: 'Tanggal', key: 'Tanggal', width: '120px' },
   { title: 'No. Invoice', key: 'NoInvoice', width: '150px' },
   { title: 'Tgl Invoice', key: 'TglInvoice', width: '120px' },
-  {
-    title: 'Nominal',
-    key: 'NominalPembelian', // Ganti key (tanpa spasi)
-    value: 'Nominal Pembelian', // Opsional: Tentukan value accessor jika key berbeda
-    align: 'end',
-    width: '150px'
-  },
+  { title: 'Nominal', key: 'NominalPembelian', align: 'end', width: '150px' },
   { title: 'Keterangan', key: 'Keterangan', minWidth: '200px' },
   { title: 'Created', key: 'Created', width: '120px' },
-  { title: '', key: 'data-table-expand', width: '40px', align: 'end' as const },
+  { title: '', key: 'data-table-expand', width: '40px', align: 'end' },
 ];
-
 // Header Tabel Detail (Item Pembelian)
-const detailHeaders: VDataTableHeaders = [
+const detailHeaders: TableHeader[] = [
   { title: 'Kode', key: 'Kode', width: '120px' },
   { title: 'Nama Barang', key: 'Nama', width: '300px' },
   { title: 'Ukuran', key: 'Ukuran', align: 'center', width: '80px' },
@@ -129,20 +129,32 @@ const fetchDetailsData = async (nomor: string) => {
     detailsData.value[nomor] = response.data;
   } catch (error) {
     toast.error(`Gagal memuat detail untuk nomor ${nomor}.`);
-    expanded.value = expanded.value.filter(h => h.Nomor !== nomor);
+    expanded.value = expanded.value.filter(h => h !== nomor);
   } finally {
     loadingDetails.value.delete(nomor);
   }
 };
 
-// Watcher untuk memuat detail
-watch(expanded, (newExpandedItems) => {
-  const newItem = newExpandedItems.find(item =>
-    !detailsData.value[item.Nomor] &&
-    !loadingDetails.value.has(item.Nomor)
+const handleRowClick = (event: PointerEvent, { item }: { item: PembelianHeader }) => {
+  // Toggle selection berdasarkan Nomor Pembelian
+  if (selected.value.length > 0 && selected.value[0].Nomor === item.Nomor) {
+    selected.value = [];
+  } else {
+    selected.value = [item];
+  }
+};
+
+// Perbarui Watcher Anda menjadi seperti ini:
+watch(expanded, (newExpandedRows) => {
+  // Karena return-object aktif, 'row' di sini adalah satu baris data utuh (Object)
+  const rowToLoad = newExpandedRows.find(row =>
+    !detailsData.value[row.Nomor] &&
+    !loadingDetails.value.has(row.Nomor)
   );
-  if (newItem) {
-    fetchDetailsData(newItem.Nomor);
+
+  if (rowToLoad) {
+    // Kirim Properti Nomor-nya saja ke fungsi API
+    fetchDetailsData(rowToLoad.Nomor);
   }
 }, { deep: true });
 
@@ -187,20 +199,24 @@ const executeDelete = async () => {
 
 // Export (Header)
 const exportHeaderData = () => {
-  if (headersData.value.length === 0) return toast.warning('Tidak ada data header untuk diekspor.');
+  if (headersData.value.length === 0)
+    return toast.warning('Tidak ada data header untuk diekspor.');
+
   const dataToExport = headersData.value.map(h => ({
     'Nomor': h.Nomor,
     'Tanggal': h.Tanggal,
     'No Invoice': h.NoInvoice,
     'Tgl Invoice': h.TglInvoice,
-    'Nominal Pembelian': h['Nominal Pembelian'],
+    'Nominal Pembelian': h.NominalPembelian,
     'Keterangan': h.Keterangan,
     'Created': h.Created,
     'Modified': h.Modified,
   }));
+
   const worksheet = XLSX.utils.json_to_sheet(dataToExport);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Header Pembelian");
+
   XLSX.writeFile(workbook, "Export_Pembelian_Header.xlsx");
 };
 
@@ -209,7 +225,10 @@ const exportDetailData = () => {
   if (!isSingleSelected.value) {
     return toast.warning('Pilih satu header pembelian untuk mengekspor detailnya.');
   }
-  const selectedNomor = selected.value[0].Nomor;
+  const first = selected.value[0]
+  if (!first) return
+
+  const selectedNomor = first.Nomor;
   const detailToExport = detailsData.value[selectedNomor];
 
   if (!detailToExport || detailToExport.length === 0) {
@@ -297,11 +316,11 @@ onMounted(() => {
       <div class="table-container">
         <v-data-table v-model:expanded="expanded" v-model="selected" :headers="masterHeaders" :items="headersData"
           :search="search" :loading="isLoadingHeaders" item-value="Nomor" density="compact"
-          class="desktop-table fill-height-table" fixed-header show-select return-object show-expand
-          :items-per-page="50">
+          class="desktop-table fill-height-table colored-header" fixed-header show-select return-object show-expand
+          select-strategy="single" @click:row="handleRowClick" :items-per-page="50">
           <!-- Format Kolom Nominal -->
           <template #[`item.NominalPembelian`]="{ value }">
-            {{ formatCurrency(value) }}
+            <span class="font-weight-bold">{{ formatCurrency(value) }}</span>
           </template>
 
           <!-- Slot untuk Expanded Row (Tabel Detail) -->
@@ -309,29 +328,20 @@ onMounted(() => {
             <tr>
               <td :colspan="columns.length" class="expanded-detail-cell">
                 <div class="detail-container">
-                  <div class="detail-table-wrapper">
-                    <div v-if="loadingDetails.has(item.Nomor)" class="text-center py-2 text-caption">
-                      <v-progress-circular indeterminate size="20" width="2" color="primary"
-                        class="me-2"></v-progress-circular>
-                      Memuat detail...
+                  <div class="detail-table-wrapper elevation-1">
+                    <div v-if="loadingDetails.has(item.Nomor)" class="text-center py-4">
+                      <v-progress-circular indeterminate size="24" color="primary"></v-progress-circular>
                     </div>
-                    <v-data-table v-else-if="detailsData[item.Nomor] && detailsData[item.Nomor].length"
-                      :headers="detailHeaders" :items="detailsData[item.Nomor]" density="compact" class="detail-table"
-                      :items-per-page="-1">
-                      <template #[`item.Jumlah`]="{ value }">
-                        {{ formatNumber(value) }}
-                      </template>
-                      <template #[`item.Hpp`]="{ value }">
-                        {{ formatCurrency(value) }}
-                      </template>
+
+                    <v-data-table v-else-if="detailsData[item.Nomor]?.length" :headers="detailHeaders"
+                      :items="detailsData[item.Nomor]" density="compact"
+                      class="detail-table colored-header-sub zebra-table" hide-default-footer>
+                      <template #[`item.Jumlah`]="{ value }">{{ formatNumber(value) }}</template>
+                      <template #[`item.Hpp`]="{ value }">{{ formatCurrency(value) }}</template>
                       <template #[`item.Total`]="{ value }">
-                        <span class="font-weight-bold">{{ formatCurrency(value) }}</span>
+                        <span class="text-primary font-weight-bold">{{ formatCurrency(value) }}</span>
                       </template>
-                      <template #bottom></template> <!-- Sembunyikan footer tabel detail -->
                     </v-data-table>
-                    <div v-else class="text-center py-2 text-caption">
-                      Tidak ada data detail item ditemukan.
-                    </div>
                   </div>
                 </div>
               </td>
@@ -379,15 +389,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Salin style standar dari RekeningView.vue */
+/* Paksa Konsistensi Font 11px untuk seluruh konten */
+.browse-content :deep(*) {
+  font-size: 11px !important;
+}
+
+/* Layout Dasar */
 .browse-content {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 120px);
-}
-
-.filter-section {
-  flex-shrink: 0;
 }
 
 .table-container {
@@ -397,22 +408,54 @@ onMounted(() => {
   border-radius: 4px;
 }
 
-.v-data-table {
-  height: 100%;
+/* --- KONSISTENSI BIRU (PRIMARY) --- */
+
+/* Header Tabel Master */
+.colored-header :deep(thead th) {
+  background-color: #1976D2 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: uppercase;
 }
 
-.v-data-table :deep(.v-table__wrapper) {
-  height: 100%;
-  overflow-y: auto;
+/* Header Tabel Detail (Abu-abu Gelap) */
+.colored-header-sub :deep(thead th) {
+  background-color: #455A64 !important;
+  color: white !important;
+  font-size: 10px !important;
 }
 
+/* Checkbox Header Putih */
+.colored-header :deep(thead .v-checkbox-btn .v-selection-control__wrapper) {
+  color: white !important;
+}
+
+/* Highlight Baris Dipilih */
+.desktop-table :deep(tr.v-data-table__selected) {
+  background-color: #E3F2FD !important;
+}
+
+/* Hover Effect */
+.desktop-table :deep(tbody tr:hover),
+.zebra-table :deep(tbody tr:hover) {
+  cursor: pointer;
+  background-color: #f5f5f5 !important;
+}
+
+/* Zebra Striping Tabel Detail */
+.zebra-table :deep(tbody tr:nth-of-type(odd)) {
+  background-color: #fcfcfc !important;
+}
+
+/* --- EXPANDED DETAIL STYLING --- */
 .expanded-detail-cell {
   padding: 0 !important;
-  background-color: #f7f7f7;
+  background-color: #f8f9fa;
 }
 
 .detail-container {
-  padding: 8px 16px 8px 60px;
+  padding: 10px 16px 10px 60px;
+  /* Indentasi agar rapi */
 }
 
 .detail-table-wrapper {
@@ -420,23 +463,5 @@ onMounted(() => {
   border-radius: 4px;
   overflow: hidden;
   background-color: white;
-}
-
-.detail-table {
-  font-size: 11px !important;
-}
-
-.detail-table :deep(td),
-.detail-table :deep(th) {
-  padding: 0 8px !important;
-  height: 26px !important;
-}
-
-.state-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
 }
 </style>
