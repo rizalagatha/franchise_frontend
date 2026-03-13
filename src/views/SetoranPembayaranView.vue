@@ -78,17 +78,12 @@ const fetchData = async () => {
 };
 
 const fetchDetails = async (payload: any) => {
-  // 1. Guard clause: Jika payload kosong, batalkan
   if (!payload) return;
 
-  // 2. Ekstrak nomor dengan sangat aman menggunakan Optional Chaining (?.)
-  // Vuetify bisa saja mengirim: String, Object Mentah (payload.Nomor), atau Wrapper (payload.raw.Nomor)
-  const nomor =
-    typeof payload === "string"
-      ? payload
-      : payload?.raw?.Nomor || payload?.Nomor;
+  // Jika return-object aktif, payload adalah objek utuh { Nomor, Tanggal, ... }
+  // Jika tidak, payload adalah string Nomor.
+  const nomor = typeof payload === "string" ? payload : payload?.Nomor;
 
-  // 3. Guard clause: Jika nomor tidak ditemukan atau rincian sudah ada, batalkan
   if (!nomor || detailsData.value[nomor]) return;
 
   try {
@@ -337,7 +332,7 @@ onMounted(fetchData);
                 <div class="detail-container">
                   <div class="detail-table-wrapper elevation-1">
                     <div
-                      v-if="!detailsData[item.raw.Nomor]"
+                      v-if="!detailsData[item.Nomor]"
                       class="text-center py-6"
                     >
                       <v-progress-circular
@@ -356,7 +351,7 @@ onMounted(fetchData);
 
                     <v-data-table
                       v-else
-                      :items="detailsData[item.raw.Nomor]"
+                      :items="detailsData[item.Nomor]"
                       :headers="[
                         { title: 'Inv. Bayar', key: 'Invoice', width: '150px' },
                         { title: 'Tgl Inv', key: 'TglInvoice', width: '100px' },

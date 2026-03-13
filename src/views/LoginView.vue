@@ -1,150 +1,274 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import api from '@/services/api';
-import { useAuthStore } from '@/stores/authStore';
-import { useToast } from 'vue-toastification';
-import { useRouter } from 'vue-router';
-import { AxiosError } from 'axios';
-import logoUrl from '@/assets/logo.png'; // Pastikan logo.png ada di src/assets/
+import { ref } from "vue";
+import api from "@/services/api";
+import { useAuthStore } from "@/stores/authStore";
+import { useToast } from "vue-toastification";
+import { useRouter } from "vue-router";
+import { AxiosError } from "axios";
+import logoUrl from "@/assets/logo.png";
+// Import gambar lokal agar diproses Vite
+import bgImage from "@/assets/login-bg.jpg";
 
 const toast = useToast();
 const router = useRouter();
 const authStore = useAuthStore();
 
-const kodeUser = ref('');
-const password = ref('');
+const kodeUser = ref("");
+const password = ref("");
 const isLoading = ref(false);
 const showPassword = ref(false);
-
-// --- SEMUA LOGIKA BRANCH DIHAPUS ---
-// const isBranchDialogVisible = ref(false);
-// const branchList = ref<Branch[]>([]);
-// const tempToken = ref('');
-// const selectedCabang = ref<string | null>(null);
+const rememberMe = ref(false);
 
 const handleLogin = async () => {
   if (!kodeUser.value || !password.value) {
-    toast.error('User dan Password harus diisi.');
+    toast.error("User dan Password harus diisi.");
     return;
   }
   isLoading.value = true;
   try {
-    // Panggil API login
-    const response = await api.post('/auth/login', {
+    const response = await api.post("/auth/login", {
       kodeUser: kodeUser.value,
       password: password.value,
     });
 
-    // --- LOGIKA LOGIN DISERDERHANAKAN ---
-    // Tidak perlu cek 'requiresBranchSelection'
-    // Langsung simpan data login
     authStore.setLoginData(response.data);
-    toast.success('Login berhasil!');
-    router.push('/'); // Arahkan ke halaman utama
-
+    toast.success("Login berhasil!");
+    router.push("/");
   } catch (err) {
     const error = err as AxiosError<{ message: string }>;
-    toast.error(error.response?.data?.message || 'Terjadi kesalahan saat login.');
+    toast.error(
+      error.response?.data?.message || "Terjadi kesalahan saat login.",
+    );
   } finally {
     isLoading.value = false;
   }
 };
-
-// --- handleBranchSelect DIHAPUS ---
-
-const handleCancel = () => {
-  kodeUser.value = '';
-  password.value = '';
-  showPassword.value = false;
-  router.push({ name: 'Home' }); // arahkan ke home
-};
 </script>
 
 <template>
-  <v-container class="fill-height d-flex align-center justify-center" fluid>
-    <v-row align="center" justify="center" class="w-100">
-      <v-col cols="12" sm="10" md="6" lg="4" xl="3">
-        <v-card elevation="8" class="mx-auto" style="border-radius: 16px;">
-          <!-- Header -->
-          <v-card-title class="pa-0">
-            <v-sheet color="primary" class="d-flex align-center justify-space-between pa-6 w-100"
-              style="border-radius: 16px 16px 0 0;">
-              <div>
-                <h2 class="text-white text-h5 mb-1 font-weight-bold">Selamat Datang</h2>
-                <p class="text-white text-body-2 mb-0" style="opacity: 0.9;">
-                  Masuk ke aplikasi Franchise
-                </p>
-              </div>
-              <v-avatar size="56" color="white" class="elevation-2">
-                <v-img :src="logoUrl" alt="Company Logo" />
-              </v-avatar>
-            </v-sheet>
-          </v-card-title>
+  <div
+    class="login-page-wrapper"
+    :style="{
+      backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.7)), url(${bgImage})`,
+    }"
+  >
+    <v-row no-gutters class="fill-height">
+      <v-col
+        cols="12"
+        md="7"
+        lg="8"
+        class="d-none d-md-flex flex-column justify-center px-16 text-white"
+      >
+        <div class="welcome-content">
+          <v-avatar size="80" color="white" class="mb-6 elevation-10">
+            <v-img :src="logoUrl" alt="Company Logo" />
+          </v-avatar>
+          <h1 class="welcome-title font-weight-black mb-4">
+            Welcome<br />Back
+          </h1>
+          <p class="text-h6 mb-8 text-white-opacity">
+            Kelola bisnis franchise Anda dengan lebih mudah,<br />
+            cepat, dan terintegrasi dalam satu sistem cerdas.
+          </p>
+          <div class="d-flex social-icons">
+            <v-icon size="28" class="mr-6 cursor-pointer hover-scale"
+              >mdi-facebook</v-icon
+            >
+            <v-icon size="28" class="mr-6 cursor-pointer hover-scale"
+              >mdi-twitter</v-icon
+            >
+            <v-icon size="28" class="mr-6 cursor-pointer hover-scale"
+              >mdi-instagram</v-icon
+            >
+            <v-icon size="28" class="cursor-pointer hover-scale"
+              >mdi-youtube</v-icon
+            >
+          </div>
+        </div>
+      </v-col>
 
-          <v-card-text class="pa-8">
-            <v-form @submit.prevent="handleLogin">
-              <!-- User Field -->
-              <v-text-field v-model="kodeUser" label="Kode User" placeholder="Masukkan kode user" variant="outlined"
-                prepend-inner-icon="mdi-account" class="mb-4" :rules="[v => !!v || 'Kode user harus diisi']"
-                hide-details="auto" autofocus @keydown.enter.prevent="handleLogin"></v-text-field>
+      <v-col
+        cols="12"
+        md="5"
+        lg="4"
+        class="d-flex align-center justify-center px-8"
+      >
+        <v-card
+          width="100%"
+          max-width="400"
+          elevation="0"
+          color="transparent"
+          class="text-white login-form-card"
+        >
+          <div class="text-center d-md-none mb-8">
+            <v-avatar size="72" color="white" class="elevation-5 mb-3"
+              ><v-img :src="logoUrl"
+            /></v-avatar>
+            <h2 class="font-weight-bold">Franchise System</h2>
+          </div>
 
-              <!-- Password Field -->
-              <v-text-field v-model="password" label="Password" placeholder="Masukkan password"
-                :type="showPassword ? 'text' : 'password'" variant="outlined" prepend-inner-icon="mdi-lock"
-                :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                @click:append-inner="showPassword = !showPassword" class="mb-6"
-                :rules="[v => !!v || 'Password harus diisi']" hide-details="auto"
-                @keydown.enter.prevent="handleLogin"></v-text-field>
+          <h2 class="text-h3 font-weight-bold mb-10 d-none d-md-block">
+            Sign in
+          </h2>
 
-              <!-- Actions -->
-              <div class="d-flex justify-space-between align-center">
-                <v-btn variant="text" color="grey-darken-1" @click="handleCancel" :disabled="isLoading"
-                  prepend-icon="mdi-close">
-                  Batal
-                </v-btn>
-
-                <v-btn type="submit" color="primary" size="large" :loading="isLoading" variant="elevated"
-                  prepend-icon="mdi-login" min-width="120">
-                  {{ isLoading ? 'Masuk...' : 'Masuk' }}
-                </v-btn>
-              </div>
-            </v-form>
-          </v-card-text>
-
-          <!-- Footer -->
-          <v-divider></v-divider>
-          <v-card-actions class="pa-4 justify-center">
-            <div class="text-center">
-              <div class="text-body-2 text-medium-emphasis mb-1">
-                <v-icon size="16" class="me-1">mdi-shield-check</v-icon>
-                Sistem Aplikasi Franchise
-              </div>
-              <div class="text-caption text-medium-emphasis">
-                Version 1.0 - Secure Login
-              </div>
+          <v-form @submit.prevent="handleLogin">
+            <div class="input-group mb-5">
+              <label
+                class="text-caption font-weight-black text-uppercase mb-2 d-block tracking-widest"
+                >User ID</label
+              >
+              <v-text-field
+                v-model="kodeUser"
+                placeholder="Masukkan kode user"
+                variant="solo"
+                flat
+                density="comfortable"
+                class="custom-input-field"
+                autofocus
+                hide-details
+              ></v-text-field>
             </div>
-          </v-card-actions>
+
+            <div class="input-group mb-2">
+              <label
+                class="text-caption font-weight-black text-uppercase mb-2 d-block tracking-widest"
+                >Password</label
+              >
+              <v-text-field
+                v-model="password"
+                placeholder="Masukkan password"
+                :type="showPassword ? 'text' : 'password'"
+                variant="solo"
+                flat
+                density="comfortable"
+                class="custom-input-field"
+                hide-details
+                @click:append-inner="showPassword = !showPassword"
+                :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+              ></v-text-field>
+            </div>
+
+            <div class="d-flex align-center justify-space-between mb-8">
+              <v-checkbox
+                v-model="rememberMe"
+                label="Remember Me"
+                hide-details
+                density="compact"
+                color="white"
+                class="remember-me-checkbox"
+              ></v-checkbox>
+              <a
+                href="#"
+                class="text-caption text-white text-decoration-none border-b"
+                >Lost your password?</a
+              >
+            </div>
+
+            <v-btn
+              type="submit"
+              color="orange-darken-4"
+              block
+              height="54"
+              class="font-weight-black text-white elevation-8 mb-8"
+              :loading="isLoading"
+            >
+              SIGN IN NOW
+            </v-btn>
+
+            <p class="text-caption text-center text-white-opacity">
+              By clicking on "Sign in now" you agree to<br />
+              <a href="#" class="text-white font-weight-bold"
+                >Terms of Service</a
+              >
+              |
+              <a href="#" class="text-white font-weight-bold">Privacy Policy</a>
+            </p>
+          </v-form>
         </v-card>
       </v-col>
     </v-row>
-  </v-container>
+  </div>
 </template>
 
 <style scoped>
-/* Custom styling for full height container */
-.fill-height {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-  /* Warna baru untuk franchise */
-}
-
-/* Ensure proper width for responsiveness */
-.w-100 {
+/* Paksa Full Viewport */
+.login-page-wrapper {
   width: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  overflow: hidden;
 }
 
-/* Custom card shadow enhancement */
-.v-card {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+.fill-height {
+  height: 100vh !important;
+}
+
+/* Typography Kiri */
+.welcome-title {
+  font-size: 5.5rem !important;
+  line-height: 0.95;
+  letter-spacing: -3px !important;
+  text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.text-white-opacity {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Custom Input (Putih Bersih) */
+.custom-input-field :deep(.v-field) {
+  background-color: white !important;
+  border-radius: 4px !important;
+  color: #222 !important;
+  font-weight: 600;
+}
+
+.custom-input-field :deep(.v-field__input) {
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+}
+
+.tracking-widest {
+  letter-spacing: 1.5px !important;
+}
+
+/* Checkbox & Helpers */
+.remember-me-checkbox :deep(.v-label) {
+  font-size: 13px !important;
+  opacity: 1 !important;
+  color: white !important;
+}
+
+.hover-scale:hover {
+  transform: scale(1.25);
+  transition: all 0.2s ease-in-out;
+  color: #ff6d00 !important;
+}
+
+/* Animasi Fade In */
+.welcome-content,
+.login-form-card {
+  animation: fadeIn 1s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive: Gambarnya tetep full tapi layout berubah */
+@media (max-width: 959px) {
+  .login-page-wrapper {
+    overflow-y: auto;
+  }
 }
 </style>
