@@ -30,7 +30,6 @@ import UserBrowseView from "@/views/UserBrowseView.vue";
 import UserFormView from "@/views/UserFormView.vue";
 import MintaBarangKaosanView from "@/views/MintaBarangKaosanView.vue";
 import MintaBarangKaosanFormView from "@/views/MintaBarangKaosanFormView.vue";
-import PerusahaanView from "@/views/PerusahaanView.vue"; // Tambahan untuk Perusahaan
 
 const routes = [
   {
