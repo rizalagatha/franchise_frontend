@@ -23,7 +23,7 @@ export default defineConfig({
     proxy: {
       "/api": {
         // Arahkan ke backend FRANCHISE Anda
-        target: "http://localhost:5001",
+        target: "https://priorityapi.kaosanofficial.com",
         changeOrigin: true,
       },
     },
