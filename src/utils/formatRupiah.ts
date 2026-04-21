@@ -1,19 +1,16 @@
-/**
- * Memformat angka ke dalam format mata uang Rupiah
- * Contoh: 150000 -> Rp 150.000
- */
 export const formatRupiah = (
   value: number | string | null | undefined,
 ): string => {
-  if (value === null || value === undefined || value === "") return "Rp 0";
+  if (value === null || value === undefined) return "Rp 0";
 
-  const num = typeof value === "string" ? parseFloat(value) : value;
+  const numericValue = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(numericValue)) return "Rp 0";
 
-  if (isNaN(num)) return "Rp 0";
-
+  // Math.round() akan membulatkan 47979.96 menjadi 47980
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
-  }).format(num);
+    maximumFractionDigits: 0, // Paksa hilangkan angka di belakang koma
+  }).format(Math.round(numericValue));
 };

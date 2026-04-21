@@ -6,15 +6,17 @@ import logoUrl from "@/assets/logo.png";
 import api from "@/services/api";
 import { useToast } from "vue-toastification";
 import { format, subDays } from "date-fns";
-import { Bar } from "vue-chartjs";
+import { Line } from "vue-chartjs";
 import {
   Chart as ChartJS,
   Title,
   Tooltip,
   Legend,
-  BarElement,
+  LineElement, // <--- Tambah
+  PointElement, // <--- Tambah
   CategoryScale,
   LinearScale,
+  Filler, // <--- Tambah untuk efek fill Area
 } from "chart.js";
 import type { TooltipItem } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
@@ -23,9 +25,11 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  BarElement,
+  LineElement, // <--- Register ini
+  PointElement, // <--- Register ini
   CategoryScale,
   LinearScale,
+  Filler, // <--- Register ini
   ChartDataLabels,
 );
 
@@ -127,14 +131,16 @@ const fetchSalesChartData = async () => {
       params: {
         start: chartFilters.startDate,
         end: chartFilters.endDate,
-        groupBy: chartGroupBy.value, // Kirim params ke backend
+        groupBy: chartGroupBy.value,
       },
     });
 
+    // PENGAMANAN: Cek apakah data array langsung atau dibungkus object { data: [...] }
+    const dataArray = Array.isArray(res.data) ? res.data : res.data.data;
+
     chartData.value = {
-      labels: res.data.map((i: any) => {
+      labels: dataArray.map((i: any) => {
         const d = new Date(i.tanggal);
-        // Format label dinamis: Harian (13/03), Mingguan (W-11)
         if (chartGroupBy.value === "day") return format(d, "dd/MM");
         if (chartGroupBy.value === "week") return `Mgg-${format(d, "ww")}`;
         return format(d, "MMM yy");
@@ -142,16 +148,19 @@ const fetchSalesChartData = async () => {
       datasets: [
         {
           label: "Sales",
-          backgroundColor: "rgba(25, 118, 210, 0.2)", // Warna isi (Area)
-          borderColor: "#1976D2", // Warna garis
+          backgroundColor: "rgba(25, 118, 210, 0.2)",
+          borderColor: "#1976D2",
           borderWidth: 2,
-          fill: true, // Jadi Area Chart (Lebih Mewah)
-          tension: 0.4, // Garis melengkung halus
-          pointRadius: 3,
-          data: res.data.map((i: any) => parseFloat(i.total)),
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          data: dataArray.map((i: any) => parseFloat(i.total)),
         },
       ],
     };
+  } catch (error) {
+    console.error("Gagal load chart:", error);
+    toast.error("Gagal memuat grafik penjualan."); // SEKARANG ERRORNYA KELIHATAN
   } finally {
     isLoadingChart.value = false;
   }
@@ -235,7 +244,7 @@ onUnmounted(() => clearInterval(intervalId));
                 size="x-small"
                 class="font-weight-black text-white"
               >
-                CABANG: {{ authStore.user?.cabang_nama || "PUSAT" }}
+                CABANG: {{ authStore.user?.cabangNama || "PUSAT" }}
               </v-chip>
             </div>
             <v-btn
@@ -295,13 +304,14 @@ onUnmounted(() => clearInterval(intervalId));
           </v-card-title>
           <v-card-text class="pa-4">
             <div style="height: 220px">
-              <Bar
+              <Line
                 v-if="!isLoadingChart"
                 :data="chartData"
                 :options="{
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: { legend: { display: false } },
+                  scales: { y: { beginAtZero: true } },
                 }"
               />
             </div>

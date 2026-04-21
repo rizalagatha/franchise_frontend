@@ -1,1121 +1,557 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import api from '@/services/api';
-import PageLayout from '@/components/PageLayout.vue';
-import { useToast } from 'vue-toastification';
-import { useAuthStore } from '@/stores/authStore';
-import { format } from 'date-fns';
-import type { AxiosError } from 'axios';
-import JsBarcode from 'jsbarcode';
-import ItemLookupModal from '@/components/lookup/ItemLookupModal.vue';
+import { ref, onMounted, nextTick, watch } from "vue";
+import { useForm } from "@/composables/useForm";
+import api from "@/services/api";
+import { useToast } from "vue-toastification";
+import { format } from "date-fns";
+import JsBarcode from "jsbarcode";
 
-(window as any).JsBarcode = JsBarcode;
+// Components
+import BaseForm from "@/components/BaseForm.vue";
+import ItemLookupModal from "@/components/lookup/ItemLookupModal.vue";
 
-// Store & composables
-const router = useRouter();
-const route = useRoute();
 const toast = useToast();
-const authStore = useAuthStore();
-const MENU_ID = '13';
 
-// Interface untuk item di grid detail
-interface BarcodeItem {
-  id: number; // ID unik sementara untuk v-for key
-  kode: string;
-  barcode: string;
-  nama: string;
-  ukuran: string;
-  harga: number | null;
-  jumlah: number | null;
-}
-
-// Interface F1 (hanya kode & nama)
-interface LookupItem {
-  kode: string;
-  nama: string;
-}
-// Interface Detail (yang diambil API kedua)
-interface LookupResultItem {
-  kode: string;
-  barcode: string;
-  nama: string;
-  ukuran: string;
-  harga: number | null;
-}
-
-interface BarcodeLabel {
-  nomor: string
-  tgl: string
-  kode: string
-  ukuran: string
-  barcode: string
-  nama: string
-  harga: string
-  charga: string
-  nourut: number
-  layoutType: string
-}
-
-type TableHeader = {
-  title: string
-  key: string
-  width?: string
-  align?: 'start' | 'center' | 'end'
-  sortable?: boolean
-}
-
-// Tentukan mode (Edit atau Baru)
-const isEditMode = computed(() => !!route.params.nomor);
-const pageTitle = computed(() => isEditMode.value ? 'Ubah Cetak Barcode' : 'Buat Cetak Barcode');
-const requiredPermission = computed(() => isEditMode.value ? 'edit' : 'insert');
-
-// Hak akses (Tambahkan definisi ini)
-const hasViewPermission = computed(() => authStore.can(MENU_ID, 'view')); // View (mungkin tidak dipakai di form, tapi ada)
-const canInsert = computed(() => authStore.can(MENU_ID, 'insert'));
-const canEdit = computed(() => authStore.can(MENU_ID, 'edit'));
-const canDelete = computed(() => authStore.can(MENU_ID, 'delete')); // Meskipun tidak dipakai di form
-
-// State untuk Header Form
-const formHeader = ref({
-  nomor: '', // Akan diisi saat edit atau setelah save baru
-  tanggal: format(new Date(), 'yyyy-MM-dd'),
+// --- Setup Composable Logic (NEW) ---
+const {
+  isEditMode,
+  isLoading,
+  isSaving,
+  showSaveDialog,
+  showCancelDialog,
+  showCloseDialog,
+  executeClose,
+  goBack,
+  params,
+} = useForm({
+  menuId: "13",
+  initialData: {},
+  onSuccessRoute: "/daftar/cetak-barcode", // <--- GPS Pulang
+  submitApi: async () => {}, // Dikosongkan karena kita override fungsi save-nya di bawah
 });
 
-// State untuk Grid Detail
-const items = ref<BarcodeItem[]>([]);
-const nextItemId = ref(1); // Counter untuk ID unik sementara
+// --- State Utama ---
+const formHeader = ref({
+  nomor: "",
+  tanggal: format(new Date(), "yyyy-MM-dd"),
+});
+const items = ref<any[]>([]);
+const nextItemId = ref(1);
+const searchTerm = ref("");
+const isLookupVisible = ref(false);
 
-// State Loading & Saving
-const isLoading = ref(true); // Loading data awal (untuk edit)
-const isSaving = ref(false);
-
-// State untuk Lookup Barang
-const searchTerm = ref('');
-const lookupResults = ref<LookupResultItem[]>([]);
-const isLookupLoading = ref(false);
-const isLookupVisible = ref(false); // Kontrol visibility modal lookup
-const editingRowIndex = ref<number | null>(null); // Index baris grid yg aktif
-
-// State untuk Konfirmasi
-const isConfirmDialogVisible = ref(false);
-const confirmText = ref('');
-const pendingAction = ref<(() => void) | null>(null);
-
-// --- State BARU untuk Opsi Cetak ---
-const selectedPrinter = ref<'XP-360B' | '360B'>('XP-360B'); // Default printer type
-const showPriceOnLabel = ref(false); // Default: harga tidak tampil
-const isPrinting = ref(false); // Loading state for print preparation
-
-// --- State BARU untuk Print Preview ---
+// --- State Printing ---
+const selectedPrinter = ref("XP-360B");
+const showPriceOnLabel = ref(false);
 const isPrintPreviewVisible = ref(false);
-const printPreviewData = ref<any[]>([]); // Data yang akan ditampilkan di preview
+const printPreviewData = ref<any[]>([]);
+const isPreviewFromSave = ref(false);
 
-// Header Tabel Detail
-const tableHeaders: TableHeader[] = [
-  { title: '#', key: 'no', sortable: false, width: '50px' },
-  { title: 'Kode Barang', key: 'kode', width: '120px' },
-  { title: 'Barcode', key: 'barcode', width: '130px' },
-  { title: 'Nama Barang', key: 'nama', width: '300px' },
-  { title: 'Size', key: 'ukuran', align: 'center', width: '80px' },
-  { title: 'Harga', key: 'harga', align: 'end', width: '100px' },
-  { title: 'Jumlah', key: 'jumlah', align: 'end', width: '120px' },
-  { title: 'Actions', key: 'actions', sortable: false, width: '50px', align: 'center' },
+const headers = [
+  { title: "#", key: "no", width: "50px" },
+  { title: "KODE BARANG", key: "kode", width: "120px" },
+  { title: "BARCODE", key: "barcode", width: "130px" },
+  { title: "NAMA BARANG", key: "nama", minWidth: "250px" },
+  { title: "SIZE", key: "ukuran", align: "center" as const, width: "80px" },
+  { title: "HARGA", key: "harga", align: "end" as const, width: "100px" },
+  { title: "JUMLAH", key: "jumlah", align: "end" as const, width: "100px" },
+  {
+    title: "AKSI",
+    key: "actions",
+    sortable: false,
+    width: "50px",
+    align: "center" as const,
+  },
 ];
 
-// --- Methods ---
-const printStylesXP360B = `
-  @page {
-    size: 68mm 15mm landscape;
-    margin: 0;
+// --- Logic Actions ---
+const validateForm = () => {
+  const validItems = items.value.filter((i) => i.kode && (i.jumlah || 0) > 0);
+  if (validItems.length === 0)
+    return toast.warning("Item tidak valid / jumlah kosong.");
+
+  showSaveDialog.value = true;
+};
+
+// Override manual agar bisa buka preview cetak setelah sukses simpan
+const executeSave = async () => {
+  const validItems = items.value.filter((i) => i.kode && (i.jumlah || 0) > 0);
+  isSaving.value = true;
+  try {
+    const payload = {
+      header: formHeader.value,
+      items: validItems,
+      isNew: !isEditMode.value,
+    };
+    const res = await api.post("/barcodes/save", payload);
+    toast.success("Berhasil disimpan!");
+
+    showSaveDialog.value = false;
+
+    // Set penanda TRUE karena ini dari proses simpan
+    isPreviewFromSave.value = true;
+    preparePrint(validItems, res.data.nomor);
+  } catch (e: any) {
+    toast.error(e.response?.data?.message || "Gagal simpan data.");
+  } finally {
+    isSaving.value = false;
   }
+};
 
-  html, body {
-    margin: 0; padding: 0;
-    width: 68mm; height: auto;
-    overflow: visible !important;
-    font-family: Arial, sans-serif;
-    transform: rotate(180deg);
-    transform-origin: center;
+const handleConfirmCancel = () => {
+  showCancelDialog.value = false;
+  if (isEditMode.value) {
+    loadData(params.nomor as string);
+  } else {
+    formHeader.value = {
+      nomor: "",
+      tanggal: format(new Date(), "yyyy-MM-dd"),
+    };
+    items.value = [];
+    searchTerm.value = "";
+    addEmptyRow();
   }
+  toast.info("Form di-reset.");
+};
 
-  .label-pair-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 68mm;
-    height: 15mm;
-    padding: 0;
-    margin: 0;
-    box-sizing: border-box;
-    page-break-after: always !important;
-  }
+// --- Logic Detail & Print ---
+const addEmptyRow = () =>
+  items.value.push({
+    id: nextItemId.value++,
+    kode: "",
+    barcode: "",
+    nama: "",
+    ukuran: "",
+    harga: null,
+    jumlah: null,
+  });
 
-  .label-pair-container:last-child {
-    page-break-after: avoid;
-  }
-
-  .barcode-label {
-    width: 33mm;
-    height: 15mm;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    overflow: hidden;
-    box-sizing: border-box;
-    padding: 0.5mm 1mm;
-    margin: 0;
-    border: 0.1mm dashed #ccc;
-    font-size: 5px;
-    line-height: 1.1;
-  }
-
-  .item-info {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-    margin: 0;
-  }
-  .item-name { font-weight: bold; }
-  .item-size { font-weight: normal; }
-
-  .barcode-svg {
-    width: 28mm;
-    height: 7mm;
-    margin: 0.3mm 0;
-    display: block;
-  }
-
-  .label-footer {
-    display: flex;
-    justify-content: space-between;
-    width: 90%;
-    font-size: 5px;
-  }
-
-  @media print {
-    .barcode-label { border: none; }
-  }
-`;
-
-// --- AKHIR CSS ---
-
-// Load data jika mode Edit
-const loadDataForEdit = async (nomor: string) => {
+const loadData = async (nomor: string) => {
   isLoading.value = true;
   try {
-    const response = await api.get(`/barcodes/form/${nomor}`);
-    const { header, items: loadedItems } = response.data;
-
-    formHeader.value.nomor = header.bch_nomor;
-    formHeader.value.tanggal = header.bch_tanggal; // Sudah format YYYY-MM-DD
-
-    // Tambahkan ID unik ke items
-    items.value = loadedItems.map((item: any, index: number) => ({
-      ...item,
-      id: nextItemId.value++ // Beri ID unik
+    const res = await api.get(`/barcodes/form/${nomor}`);
+    formHeader.value = {
+      nomor: res.data.header.bch_nomor,
+      tanggal: res.data.header.bch_tanggal,
+    };
+    items.value = res.data.items.map((i: any) => ({
+      ...i,
+      id: nextItemId.value++,
     }));
-
-    // Tambah baris kosong di akhir jika grid kosong setelah load
-    if (items.value.length === 0) {
-      addEmptyRow();
-    }
-
-  } catch (error: unknown) {
-    toast.error('Gagal memuat data.');
-    console.error(error);
-    router.back(); // Kembali jika gagal load
+    if (items.value.length === 0) addEmptyRow();
   } finally {
     isLoading.value = false;
   }
 };
 
-// Cari barang via API (dipicu oleh Enter di searchTerm)
-const searchItem = async () => {
-  if (!searchTerm.value.trim()) return;
-  isLookupLoading.value = true;
-  try {
-    const response = await api.get<{ items: LookupResultItem[], total: number }>(
-      '/barcodes/lookup/barang', {
-      params: {
-        term: searchTerm.value.trim(),
-        page: 1,
-        itemsPerPage: 10 // Ambil 10 hasil (cukup untuk scan)
-      }
-    });
-
-    const items = response.data.items;
-    const total = response.data.total;
-
-    if (total === 0) {
-      toast.warning(`Barang dengan kode/barcode "${searchTerm.value}" tidak ditemukan.`);
-    } else if (total === 1 && items[0]) {
-      addItemToGrid(items[0]);
-      searchTerm.value = '';
-    } else {
-      // Jika > 1 hasil (misal scan kode produk), buka modal F1
-      toast.info(`Ditemukan ${total} varian. Silakan pilih dari modal.`);
-      isLookupVisible.value = true;
-      // Modal akan otomatis mencari berdasarkan 'searchTerm'
-    }
-  } catch (error) {
-    toast.error('Gagal mencari barang.');
-    console.error(error);
-  } finally {
-    isLookupLoading.value = false;
-  }
-};
-
-// Tambah item hasil lookup ke grid
-const addItemToGrid = (itemToAdd: LookupResultItem) => {
-  // Cek duplikasi di grid (berdasarkan kode & ukuran)
-  const existingItem = items.value.find(i =>
-    i.kode === itemToAdd.kode && i.ukuran === itemToAdd.ukuran
-  );
-
-  if (existingItem) {
-    // Jika sudah ada, tambahkan jumlahnya
-    existingItem.jumlah = (existingItem.jumlah || 0) + 1;
-    toast.info(`Jumlah ${existingItem.nama} (${existingItem.ukuran}) ditambah 1.`);
-  } else {
-    // Jika belum ada, tambahkan sebagai baris baru
-    // Hapus baris kosong terakhir (jika ada)
-    const lastRow = items.value[items.value.length - 1];
-    if (lastRow && !lastRow.kode && !lastRow.nama) {
-      items.value.pop();
-    }
-
-    items.value.push({
-      id: nextItemId.value++,
-      kode: itemToAdd.kode,
-      barcode: itemToAdd.barcode,
-      nama: itemToAdd.nama,
-      ukuran: itemToAdd.ukuran,
-      harga: itemToAdd.harga,
-      jumlah: 1, // Default Qty 1
-    });
-
-    addEmptyRow(); // Tambah baris kosong baru di akhir
-    toast.success(`${itemToAdd.nama} (${itemToAdd.ukuran}) ditambahkan.`);
-  }
-};
-
-// Hapus item dari grid
-const removeItem = (itemToRemove: BarcodeItem) => {
-  items.value = items.value.filter(item => item.id !== itemToRemove.id);
-  // Jika grid jadi kosong, tambahkan baris kosong
-  if (items.value.length === 0) {
-    addEmptyRow();
-  }
-};
-
-// Tambah baris kosong di akhir grid
-const addEmptyRow = () => {
-  items.value.push({
-    id: nextItemId.value++,
-    kode: '',
-    barcode: '',
-    nama: '',
-    ukuran: '',
-    harga: null,
-    jumlah: null,
-  });
-};
-
-// Simpan data (Create/Update)
-const save = () => {
-  // Validasi Header
-  if (!formHeader.value.tanggal) {
-    return toast.error('Tanggal harus diisi.');
-  }
-
-  // Validasi Detail
-  const validItems = items.value.filter(item => item.kode && (item.jumlah || 0) > 0);
-  if (validItems.length === 0) {
-    return toast.error('Detail barang belum diisi atau jumlah masih nol.');
-  }
-
-  // Tampilkan konfirmasi
-  showConfirmation(executeSave, "Yakin ingin simpan data cetak barcode ini?");
-};
-
-// Eksekusi Save API Call
-const executeSave = async () => {
-  isSaving.value = true;
-  let savedItems: BarcodeItem[] = [];
-  let savedNomor: string = '';
-  try {
-    const payload = {
-      header: formHeader.value,
-      // Kirim hanya item yang valid
-      items: items.value.filter(item => item.kode && (item.jumlah || 0) > 0),
-      isNew: !isEditMode.value,
-    };
-
-    // Gunakan endpoint /save
-    const response = await api.post('/barcodes/save', payload);
-
-    savedNomor = response.data.nomor;
-
-    savedItems = payload.items.filter(item => item.kode && (item.jumlah || 0) > 0);
-
-    toast.success(response.data.message);
-
-    const printOptions = {
-      showPrice: showPriceOnLabel.value,
-      printerType: selectedPrinter.value,
-    };
-    const dataToPrint = preparePrintData(savedItems, printOptions, savedNomor, format(new Date(formHeader.value.tanggal), 'dd/MM/yy'));
-    handlePrint(dataToPrint);
-
-  } catch (err) {
-    const error = err as AxiosError<{ message: string }>;
-    toast.error(error.response?.data?.message || 'Gagal menyimpan data.');
-    console.error(err);
-  } finally {
-    isSaving.value = false;
-    isConfirmDialogVisible.value = false; // Tutup konfirmasi
-  }
-};
-
-const closePreviewAndNavigate = () => {
-  isPrintPreviewVisible.value = false; // Tutup dialog preview
-  // Pindahkan navigasi ke sini
-  router.push('/daftar/cetak-barcode');
-};
-
-// Reset form (dipanggil oleh tombol Batal)
-const resetForm = () => {
-  if (isEditMode.value) {
-    // Jika edit, load ulang data asli
-    loadDataForEdit(route.params.nomor as string);
-  } else {
-    // Jika baru, reset ke state awal
-    formHeader.value = {
-      nomor: '',
-      tanggal: format(new Date(), 'yyyy-MM-dd'),
-    };
-    items.value = [];
-    addEmptyRow(); // Tambah baris kosong
-  }
-  toast.info("Form dibatalkan.");
-};
-
-// Tampilkan dialog konfirmasi
-const showConfirmation = (action: () => void, text: string) => {
-  pendingAction.value = action;
-  confirmText.value = text;
-  isConfirmDialogVisible.value = true;
-};
-
-// Eksekusi action yang ditunda (setelah konfirmasi 'Ya')
-const executePendingAction = () => {
-  if (pendingAction.value) {
-    pendingAction.value();
-  }
-  closeConfirmDialog(); // Tutup dialog setelah eksekusi
-};
-
-// Tutup dialog konfirmasi
-const closeConfirmDialog = () => {
-  isConfirmDialogVisible.value = false;
-  pendingAction.value = null;
-};
-
-// Tutup form (kembali ke browse)
-const closeForm = () => {
-  router.push('/daftar/cetak-barcode');
-};
-
-// Buka modal lookup dan simpan index baris
-const openLookup = (index: number) => {
-  // Hanya izinkan lookup jika user punya hak insert atau edit
-  if (!canInsert.value && !canEdit.value) {
-    toast.warning("Anda tidak punya hak akses untuk mencari barang.");
-    return;
-  }
-  editingRowIndex.value = index;
-  isLookupVisible.value = true;
-};
-
-// Tutup modal lookup
-const closeLookupModal = () => {
+const onItemSelected = async (selected: any) => {
   isLookupVisible.value = false;
-  editingRowIndex.value = null; // Reset index
-};
-
-// Handler saat item dipilih dari modal lookup
-const onItemSelected = async (selectedItem: LookupItem) => {
-  if (editingRowIndex.value === null) {
-    closeLookupModal();
-    return;
-  }
-
-  const targetRowIndex = editingRowIndex.value;
-  closeLookupModal();
-  isLookupLoading.value = true; // Tampilkan loading di form
-
+  isLoading.value = true;
   try {
-    // Panggil API kedua untuk dapat SEMUA varian
-    // Endpoint ini DARI barcodeService.js (getVarianDetailsByKode)
-    const response = await api.get(`/barcodes/details/${encodeURIComponent(selectedItem.kode)}`);
-    const varianDetails: LookupResultItem[] = response.data;
-
-    if (varianDetails.length === 0) {
-      toast.error(`Detail varian untuk kode ${selectedItem.kode} tidak ditemukan.`);
-      isLookupLoading.value = false;
-      return;
-    }
-
-    // Hapus baris kosong tempat F1 ditekan
-    const originalTargetRow = items.value[targetRowIndex];
-    if (originalTargetRow && !originalTargetRow.kode) {
-      items.value.splice(targetRowIndex, 1);
-    }
-
-    // Tambahkan SEMUA varian ke grid
-    let addedCount = 0;
-    varianDetails.forEach(varian => {
-      const isDuplicate = items.value.some(existing =>
-        existing.kode === varian.kode && existing.ukuran === varian.ukuran
-      );
-      if (!isDuplicate) {
-        items.value.push({
-          id: nextItemId.value++,
-          kode: varian.kode,
-          barcode: varian.barcode,
-          nama: varian.nama,
-          ukuran: varian.ukuran,
-          harga: varian.harga,
-          jumlah: null, // Default
-        });
-        addedCount++;
+    const res = await api.get(
+      `/barcodes/details/${encodeURIComponent(selected.kode)}`,
+    );
+    if (items.value.length > 0 && !items.value[items.value.length - 1].kode)
+      items.value.pop();
+    res.data.forEach((v: any) => {
+      if (
+        !items.value.some((ex) => ex.kode === v.kode && ex.ukuran === v.ukuran)
+      ) {
+        items.value.push({ id: nextItemId.value++, ...v, jumlah: 1 });
       }
     });
-    addEmptyRow(); // Tambah baris kosong di akhir
-    if (addedCount < varianDetails.length) {
-      toast.warning('Beberapa ukuran sudah ada di dalam list.');
-    }
-
-  } catch (error: unknown) {
-    const err = error as AxiosError<{ message?: string }>;
-    toast.error(err.response?.data?.message || 'Gagal mengambil detail varian barang.');
+    addEmptyRow();
   } finally {
-    isLookupLoading.value = false;
+    isLoading.value = false;
   }
 };
 
-const preparePrintData = (
-  itemsToPrint: BarcodeItem[],
-  options: { showPrice: boolean; printerType: 'XP-360B' | '360B' },
-  nomorDokumen: string = 'TES', // Default 'TES' untuk test printer
-  tanggalDokumen: string = format(new Date(), 'dd/MM/yy') // Default tgl hari ini
-): any[] => {
-  const outputLabels: BarcodeLabel[] = [];
-  let labelCounter = 1; // Mirip 'r' di Delphi
-
-  itemsToPrint.forEach(item => {
-    // Delphi: if (CDS.FieldByName('barcode').asstring <> '') and (CDS.FieldByName('jumlah').AsInteger<>0) then
-    if (item.barcode && (item.jumlah || 0) > 0) {
-      const qty = item.jumlah || 0;
-      // Delphi: while i<= CDS.FieldByName('jumlah').AsInteger do
-      for (let i = 1; i <= qty; i++) {
-        // Delphi: s:=s+quot('Rp '+ Trim(FormatFloat('###,###,###',CDS.FieldByName('harga').AsFloat)))+','
-        const hargaFormatted = options.showPrice && item.harga && item.harga > 0
-          ? `Rp ${new Intl.NumberFormat('id-ID').format(item.harga)}`
-          : '';
-
-        // Membuat object untuk satu label
-        outputLabels.push({
-          nomor: nomorDokumen,
-          tgl: tanggalDokumen,
-          kode: item.kode,
-          ukuran: item.ukuran,
-          barcode: item.barcode,
-          nama: item.nama,
-          harga: item.harga?.toString() ?? '', // Harga angka asli (jika perlu)
-          charga: hargaFormatted, // Harga terformat
-          nourut: labelCounter++, // Nomor urut label
-          // Tambahkan properti lain jika layout butuh (tergantung pilihan printer)
-          layoutType: options.printerType
-        });
-      }
+const preparePrint = (validItems: any[], nomor: string) => {
+  const labels: any[] = [];
+  validItems.forEach((item) => {
+    for (let i = 0; i < (item.jumlah || 0); i++) {
+      labels.push({
+        ...item,
+        nomor,
+        tgl: format(new Date(formHeader.value.tanggal), "dd/MM/yy"),
+        charga: showPriceOnLabel.value
+          ? `Rp ${new Intl.NumberFormat("id-ID").format(item.harga || 0)}`
+          : "",
+      });
     }
   });
-  return outputLabels;
-};
-
-const handlePrint = (dataForPrint: any[]) => {
-  if (dataForPrint.length === 0) {
-    toast.warning("Tidak ada item valid untuk dicetak.");
-    return;
-  }
-
-  isPrinting.value = true;
-  console.log("--- Data Siap Cetak ---", dataForPrint);
-  toast.info(`Siap mencetak ${dataForPrint.length} label (${selectedPrinter.value}, Harga: ${showPriceOnLabel.value ? 'Ya' : 'Tidak'}).`);
-
-  // --- BUKA DIALOG PREVIEW ---
-  printPreviewData.value = dataForPrint;
+  printPreviewData.value = labels;
   isPrintPreviewVisible.value = true;
-  // --- AKHIR BUKA DIALOG ---
-
-  // Matikan loading (karena preview sudah muncul)
-  isPrinting.value = false;
 };
 
-/**
- * Fungsi untuk tombol "Tes Printer".
- * Membuat data dummy dan memanggil handlePrint.
- */
-const testPrinter = () => {
-  // Delphi: btnTesPrinterClick
-  const dummyItems: BarcodeItem[] = [{
-    id: Date.now(),
-    kode: '12345678',
-    barcode: '12345678',
-    nama: 'TES PRINTER',
-    ukuran: 'TES',
-    harga: 50000, // Harga contoh
-    jumlah: 4, // Jumlah contoh
-  }];
-
-  const printOptions = {
-    showPrice: showPriceOnLabel.value,
-    printerType: selectedPrinter.value,
-  };
-
-  const dataToPrint = preparePrintData(dummyItems, printOptions, 'TES'); // Nomor 'TES'
-  handlePrint(dataToPrint);
-
-  // Tidak perlu reset form (refreshdata) di sini, biarkan user yg reset manual
-};
-
-// Fungsi untuk memicu dialog print browser
-const triggerBrowserPrint = () => {
-  // Fokus ke area cetak dan panggil window.print
-  const printContent = document.getElementById('print-area');
-  if (printContent) {
-    // Cara sederhana: langsung print seluruh window (dialog akan ikut tercetak)
-    // window.print();
-
-    // Cara lebih baik (tapi lebih kompleks):
-    // 1. Ambil HTML dari #print-area
-    // 2. Buat iframe tersembunyi
-    // 3. Masukkan HTML ke iframe
-    // 4. Panggil print() pada iframe
-    // 5. Hapus iframe
-    // Ini mencegah UI lain ikut tercetak
-    const printFrame = document.createElement('iframe');
-    printFrame.style.position = 'fixed';
-    printFrame.style.width = '100mm';
-    printFrame.style.height = '400mm'; // biar semua label muat
-    printFrame.style.border = 'none';
-    document.body.appendChild(printFrame);
-
-    const frameDoc = printFrame.contentWindow?.document;
-    if (frameDoc) {
-      frameDoc.open();
-      let stylesToInject = '';
-      if (selectedPrinter.value === 'XP-360B') {
-        stylesToInject += printStylesXP360B;
-      } else {
-        // Tambahkan style untuk printer '360B' jika ada
-        // stylesToInject += printStyles360B;
-      }
-      frameDoc.write(`<html><head><title>Cetak Barcode</title><style>${stylesToInject}</style></head><body>`);
-      frameDoc.write(printContent.innerHTML);
-      frameDoc.write('</body></html>');
-      frameDoc.close();
-
-      // Generate barcode di dalam iframe SEBELUM print
-      generateBarcodesInIframe(printFrame);
-
-      setTimeout(() => {
-        printFrame.contentWindow?.focus();
-        printFrame.contentWindow?.print();
-        // Hapus iframe setelah print (beri jeda sedikit)
-        setTimeout(() => { document.body.removeChild(printFrame); }, 1500);
-      }, 500); // Delay 500ms
-
-      isPrintPreviewVisible.value = false;
-      router.push('/daftar/cetak-barcode');
-
-    } else {
-      toast.error("Area cetak tidak ditemukan.");
-    }
-  };
-}
-
-const generateBarcodesInIframe = (iframe: HTMLIFrameElement) => {
-  const frameDoc = iframe.contentWindow?.document;
-  if (frameDoc && (window as any).JsBarcode) { // Pastikan JsBarcode sudah ada
-    const svgs = frameDoc.querySelectorAll('.barcode-svg');
-    svgs.forEach((svgElement) => {
-      const barcodeValue = svgElement.getAttribute('data-barcode-value');
-      if (barcodeValue) {
-        try {
-          JsBarcode(svgElement as SVGElement, barcodeValue, {
-            format: "CODE128", // Atau format lain
-            lineColor: "#000",
-            width: 1,      // Lebar bar (sesuaikan)
-            height: 25,    // Tinggi bar (sesuaikan)
-            displayValue: false, // Teks barcode akan kita tampilkan manual di footer
-            margin: 0,
-          });
-        } catch (e) {
-          console.error("JsBarcode error:", e);
-          // Tampilkan pesan error di tempat barcode?
-          svgElement.innerHTML = `<text x="0" y="10" font-size="6">Error</text>`;
-        }
-      }
-    });
-  }
-};
-
-// --- FUNGSI BARU: Generate Barcode di Dialog Preview ---
 const generateBarcodesInPreview = async () => {
   await nextTick();
-  const previewArea = document.getElementById('print-area');
-  if (!previewArea || !window.JsBarcode) return;
-
-  const svgs = previewArea.querySelectorAll<SVGElement>('.barcode-svg');
-  svgs.forEach(svg => {
-    const value = svg.getAttribute('data-barcode-value');
-    if (!value) return;
-    try {
-      JsBarcode(svg, value, {
-        format: 'CODE128',
-        lineColor: '#000',
+  const svgs = document.querySelectorAll<SVGElement>(".barcode-svg");
+  svgs.forEach((svg) => {
+    const val = svg.getAttribute("data-barcode-value");
+    if (val)
+      JsBarcode(svg, val, {
+        format: "CODE128",
         width: 1,
         height: 25,
         displayValue: false,
         margin: 0,
       });
-    } catch (err) {
-      console.error('JsBarcode preview error:', err);
-    }
   });
 };
 
-const onPreviewDialogEnter = async () => {
-  await nextTick(); // pastikan semua node siap
-  setTimeout(() => generateBarcodesInPreview(), 100); // beri waktu render 100ms
+// --- Fungsi Khusus Tes Printer ---
+const handleTesPrinter = () => {
+  const dummyItems = [
+    {
+      kode: "DUMMY-001",
+      barcode: "123456789012",
+      nama: "KAOS DUMMY TES KALIBRASI PRINTER",
+      ukuran: "ALL SIZE",
+      harga: 99000,
+      jumlah: 2,
+    },
+  ];
+  // Set penanda FALSE karena ini cuma tes printer
+  isPreviewFromSave.value = false;
+  preparePrint(dummyItems, "TES-PRINT");
 };
 
-const onPreviewDialogClose = () => {
-  // optional cleanup jika perlu
+const closePrintPreview = () => {
+  isPrintPreviewVisible.value = false;
+  // Kalau asalnya dari klik "Simpan", baru kita balik ke browse
+  if (isPreviewFromSave.value) {
+    goBack();
+  }
 };
 
-// Format harga (Rupiah)
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
-};
+const printStyles = `
+  @page { size: 68mm 15mm landscape; margin: 0; }
+  html, body { margin: 0; padding: 0; width: 68mm; height: 15mm; font-family: Arial; transform: rotate(180deg); transform-origin: center; }
+  .label-pair-container-preview { display: flex; justify-content: space-between; width: 68mm; height: 15mm; page-break-after: always; }
+  .preview-label-box { width: 33mm; height: 15mm; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 5px; text-align: center; }
+  .barcode-svg { width: 28mm; height: 7mm; }
+  .label-footer-preview { display: flex; justify-content: space-between; width: 90%; font-size: 4px; }
+`;
 
-// Lifecycle hook
-onMounted(() => {
-  // Cek izin akses
-  if (!authStore.can(MENU_ID, requiredPermission.value)) {
-    toast.error(`Anda tidak memiliki izin untuk ${isEditMode.value ? 'mengubah' : 'membuat'} data Cetak Barcode.`);
-    router.push({ name: 'CetakBarcode' }); // Arahkan kembali ke browse
+const triggerPrint = () => {
+  const printContent = document.getElementById("print-area");
+  if (!printContent) {
+    toast.error("Area cetak tidak ditemukan");
     return;
   }
 
-  // Load data jika mode Edit
-  const nomor = route.params.nomor as string;
-  if (isEditMode.value && nomor) {
-    loadDataForEdit(nomor);
-  } else {
-    // Mode Baru: Tambah baris kosong awal
-    addEmptyRow();
-    isLoading.value = false; // Tidak perlu loading
+  const iframe = document.createElement("iframe");
+  iframe.style.display = "none";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (doc) {
+    doc.open();
+    doc.write(`
+      <html>
+        <head><style>${printStyles}</style></head>
+        <body>${printContent.innerHTML}</body>
+      </html>
+    `);
+    doc.close();
+
+    const iframeSvgs = doc.querySelectorAll(".barcode-svg");
+    iframeSvgs.forEach((s: any) => {
+      const val = s.getAttribute("data-barcode-value");
+      if (val) {
+        JsBarcode(s, val, {
+          format: "CODE128",
+          width: 1,
+          height: 25,
+          displayValue: false,
+          margin: 0,
+        });
+      }
+    });
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+
+      closePrintPreview();
+    }, 500);
   }
+};
+
+onMounted(() => {
+  if (isEditMode.value) loadData(params.nomor as string);
+  else addEmptyRow();
 });
 
-watch(printPreviewData, (newVal) => {
-  if (isPrintPreviewVisible.value && newVal.length > 0) {
-    nextTick(() => setTimeout(generateBarcodesInPreview, 100));
-  }
+watch(isPrintPreviewVisible, (val) => {
+  if (val) setTimeout(generateBarcodesInPreview, 300);
 });
 </script>
 
 <template>
-  <PageLayout :title="pageTitle" desktop-mode icon="mdi-barcode-scan">
-    <template #header-actions>
-      <v-btn size="small" color="secondary" @click="testPrinter" :loading="isPrinting"
-        prepend-icon="mdi-printer-check">Tes Printer</v-btn>
-      <v-spacer></v-spacer>
-      <v-btn v-if="authStore.can(MENU_ID, requiredPermission)" size="small" color="primary" @click="save"
-        prepend-icon="mdi-content-save">Simpan</v-btn>
-      <v-btn size="small" variant="outlined" @click="showConfirmation(resetForm, 'Yakin ingin batalkan perubahan?')"
-        prepend-icon="mdi-cancel">Batal</v-btn>
-      <v-btn size="small" variant="tonal" color="error"
-        @click="showConfirmation(closeForm, 'Yakin ingin menutup form?')" prepend-icon="mdi-close">Tutup</v-btn>
+  <BaseForm
+    :title="isEditMode ? 'Ubah Cetak Barcode' : 'Buat Cetak Barcode'"
+    menu-id="13"
+    icon="mdi-barcode-scan"
+    :is-loading="isLoading"
+    :is-saving="isSaving"
+    v-model:show-save-dialog="showSaveDialog"
+    v-model:show-cancel-dialog="showCancelDialog"
+    v-model:show-close-dialog="showCloseDialog"
+    @validate-save="validateForm"
+    @confirm-save="executeSave"
+    @confirm-cancel="handleConfirmCancel"
+    @confirm-close="executeClose"
+  >
+    <template #left-column>
+      <div class="desktop-form-section header-section" v-if="!isLoading">
+        <v-text-field
+          label="Nomor"
+          v-model="formHeader.nomor"
+          readonly
+          variant="filled"
+          density="compact"
+          hide-details
+          class="mb-3"
+        />
+        <v-text-field
+          label="Tanggal"
+          v-model="formHeader.tanggal"
+          type="date"
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="mb-3 bg-white"
+        />
+        <v-text-field
+          label="Cari Barang (F1)"
+          v-model="searchTerm"
+          variant="outlined"
+          density="compact"
+          prepend-inner-icon="mdi-magnify"
+          hide-details
+          class="bg-white"
+          @click:prepend-inner="isLookupVisible = true"
+        />
+      </div>
+
+      <div class="desktop-form-section border-l-primary" v-if="!isLoading">
+        <div class="d-flex align-center justify-space-between mb-3">
+          <span class="text-caption font-weight-bold text-primary"
+            >PENGATURAN LABEL</span
+          >
+          <v-btn
+            size="x-small"
+            color="grey-darken-3"
+            @click="handleTesPrinter"
+            prepend-icon="mdi-printer-check"
+          >
+            Tes Printer
+          </v-btn>
+        </div>
+        <v-radio-group
+          v-model="selectedPrinter"
+          inline
+          density="compact"
+          hide-details
+          color="primary"
+          class="mb-1"
+        >
+          <v-radio label="XP-360B (A)" value="XP-360B"></v-radio>
+          <v-radio label="360B (B)" value="360B"></v-radio>
+        </v-radio-group>
+        <v-checkbox
+          v-model="showPriceOnLabel"
+          label="Tampilkan Harga Jual"
+          density="compact"
+          hide-details
+          color="primary"
+          class="mt-n2"
+        />
+      </div>
     </template>
 
-    <!-- Layout Form (Left-Right Column) -->
-    <div class="form-grid-container bg-grey-lighten-3">
-      <div class="left-column">
-        <div class="desktop-form-section header-section elevation-1 mb-3">
-          <v-row dense>
-            <v-col cols="12">
-              <v-text-field label="Nomor" v-model="formHeader.nomor" readonly variant="filled" density="compact"
-                hide-details />
-            </v-col>
-            <v-col cols="12">
-              <v-text-field label="Tanggal" v-model="formHeader.tanggal" type="date" variant="outlined"
-                density="compact" hide-details />
-            </v-col>
-            <v-col cols="12">
-              <v-text-field label="Cari Barang / Scan Barcode" v-model="searchTerm" variant="outlined" density="compact"
-                prepend-inner-icon="mdi-magnify" color="primary" @keyup.enter="searchItem" :loading="isLookupLoading"
-                hide-details />
-            </v-col>
-          </v-row>
-        </div>
+    <template #right-column>
+      <div
+        class="desktop-form-section pa-0 overflow-hidden fill-height elevation-1"
+        v-if="!isLoading"
+      >
+        <v-data-table
+          :headers="headers"
+          :items="items"
+          density="compact"
+          class="desktop-table colored-header zebra-table"
+          fixed-header
+          :items-per-page="-1"
+          hide-default-footer
+        >
+          <template #[`item.no`]="{ index }">{{ index + 1 }}</template>
 
-        <div class="desktop-form-section elevation-1 border-left-blue">
-          <v-row dense>
-            <v-col cols="12">
-              <v-radio-group v-model="selectedPrinter" inline label="Layout Printer" density="compact" hide-details
-                color="primary">
-                <v-radio label="XP-360B (A)" value="XP-360B"></v-radio>
-                <v-radio label="360B (B)" value="360B"></v-radio>
-              </v-radio-group>
-            </v-col>
-            <v-col cols="12">
-              <v-checkbox v-model="showPriceOnLabel" label="Tampilkan Harga Jual" density="compact" hide-details
-                color="primary" class="mt-n2" />
-            </v-col>
-          </v-row>
-        </div>
+          <template #[`item.kode`]="{ item }">
+            <div
+              @click="!item.kode && (isLookupVisible = true)"
+              class="cursor-pointer font-weight-bold py-2"
+            >
+              {{ item.kode || "F1 = Cari Barang" }}
+            </div>
+          </template>
+
+          <template #[`item.harga`]="{ value }">
+            <span class="text-primary font-weight-bold">
+              {{ value ? "Rp " + value.toLocaleString("id-ID") : "-" }}
+            </span>
+          </template>
+
+          <template #[`item.jumlah`]="{ item }">
+            <v-text-field
+              v-model.number="item.jumlah"
+              type="number"
+              variant="underlined"
+              density="compact"
+              hide-details
+              class="text-right-input"
+              color="primary"
+            />
+          </template>
+
+          <template #[`item.actions`]="{ item }">
+            <v-btn
+              v-if="item.kode"
+              icon="mdi-delete-outline"
+              size="x-small"
+              color="error"
+              variant="text"
+              @click="items = items.filter((i) => i.id !== item.id)"
+            ></v-btn>
+          </template>
+          <template #bottom></template>
+        </v-data-table>
       </div>
+    </template>
+  </BaseForm>
 
-      <div class="right-column">
-        <div class="desktop-form-section d-flex flex-column fill-height elevation-1 pa-0 overflow-hidden">
-          <v-data-table :headers="tableHeaders" :items="items" :loading="isLoading" density="compact"
-            class="desktop-table fill-height-table colored-header" fixed-header :items-per-page="-1">
+  <v-dialog
+    v-model="isPrintPreviewVisible"
+    max-width="700px"
+    scrollable
+    persistent
+  >
+    <v-card class="rounded-xl">
+      <v-toolbar color="primary" density="compact">
+        <v-icon class="ml-4 mr-2">mdi-printer-eye</v-icon>
+        <span class="text-subtitle-2 font-weight-bold"
+          >PRATINJAU CETAK BARCODE</span
+        >
+        <v-spacer></v-spacer>
+        <v-btn icon="mdi-close" size="small" @click="closePrintPreview"></v-btn>
+      </v-toolbar>
 
-            <template #[`item.no`]="{ index }">{{ index + 1 }}</template>
-
-            <template #[`item.kode`]="{ item, index }">
-              <v-text-field :model-value="item.kode" variant="plain" density="compact" hide-details
-                placeholder="F1 = Cari" readonly @click="!item.kode && openLookup(index)"
-                class="cursor-pointer font-weight-bold" />
-            </template>
-
-            <template #[`item.harga`]="{ item }">
-              <span class="text-primary font-weight-medium">{{ formatCurrency(item.harga) }}</span>
-            </template>
-
-            <template #[`item.jumlah`]="{ item }">
-              <v-text-field v-model.number="item.jumlah" type="number" variant="underlined" density="compact"
-                hide-details class="text-right-input" color="primary" @focus="$event.target.select()" />
-            </template>
-
-            <template #[`item.actions`]="{ item }">
-              <v-icon v-if="item.kode" size="small" color="error" @click="removeItem(item)">mdi-delete-outline</v-icon>
-            </template>
-
-            <template #bottom></template>
-          </v-data-table>
-        </div>
-      </div>
-    </div>
-
-    <!-- Dialog Konfirmasi -->
-    <v-dialog v-model="isConfirmDialogVisible" max-width="400px" persistent>
-      <v-card>
-        <v-card-title class="text-h6 font-weight-bold d-flex align-center">
-          <v-icon color="warning" class="mr-2">mdi-alert-circle-outline</v-icon>
-          Konfirmasi
-        </v-card-title>
-        <v-card-text>{{ confirmText }}</v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeConfirmDialog">Tidak</v-btn>
-          <v-btn color="primary" variant="tonal" @click="executePendingAction">Ya, Lanjutkan</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-dialog v-model="isPrintPreviewVisible" max-width="600px" scrollable>
-      <v-card>
-        <v-toolbar color="primary" density="compact">
-          <v-toolbar-title>Pratinjau Cetak Barcode</v-toolbar-title>
-          <v-spacer></v-spacer>
-          <v-btn icon="mdi-close" @click="closePreviewAndNavigate"></v-btn>
-        </v-toolbar>
-
-        <v-card-text class="pa-4 bg-grey-lighten-3">
-          <div id="print-area">
-            <div v-for="i in Math.ceil(printPreviewData.length / 2)" :key="`page-${i}`" class="label-pair-container">
-              <div v-if="printPreviewData[(i - 1) * 2]" class="barcode-label">
-                <div class="item-info item-name">{{ printPreviewData[(i - 1) * 2].nama }}</div>
-                <div class="item-info item-size">{{ printPreviewData[(i - 1) * 2].ukuran }}</div>
-                <svg class="barcode-svg" :data-barcode-value="printPreviewData[(i - 1) * 2].barcode"
-                  :id="`preview-barcode-${(i - 1) * 2}`"></svg>
-                <div class="label-footer">
-                  <span>{{ printPreviewData[(i - 1) * 2].barcode }}</span>
-                  <span>{{ printPreviewData[(i - 1) * 2].tgl }}</span>
-                  <span>{{ printPreviewData[(i - 1) * 2].ukuran }}</span>
-                  <span v-if="printPreviewData[(i - 1) * 2].charga">{{ printPreviewData[(i - 1) * 2].charga }}</span>
+      <v-card-text class="pa-6 bg-grey-lighten-4">
+        <div id="print-area" class="d-flex flex-column align-center ga-3">
+          <div
+            v-for="i in Math.ceil(printPreviewData.length / 2)"
+            :key="i"
+            class="d-flex ga-2"
+          >
+            <div v-for="j in [0, 1]" :key="j" class="preview-label-box">
+              <template v-if="printPreviewData[(i - 1) * 2 + j]">
+                <div class="text-bold">
+                  {{ printPreviewData[(i - 1) * 2 + j].nama }}
                 </div>
-              </div>
-              <div v-else class="barcode-label barcode-label-empty"></div>
-
-              <div v-if="printPreviewData[(i - 1) * 2 + 1]" class="barcode-label">
-                <div class="item-info item-name">{{ printPreviewData[(i - 1) * 2 + 1].nama }}</div>
-                <div class="item-info item-size">{{ printPreviewData[(i - 1) * 2 + 1].ukuran }}</div>
-                <svg class="barcode-svg" :data-barcode-value="printPreviewData[(i - 1) * 2 + 1].barcode"
-                  :id="`preview-barcode-${(i - 1) * 2 + 1}`"></svg>
-                <div class="label-footer">
-                  <span>{{ printPreviewData[(i - 1) * 2 + 1].barcode }}</span>
-                  <span>{{ printPreviewData[(i - 1) * 2 + 1].tgl }}</span>
-                  <span>{{ printPreviewData[(i - 1) * 2 + 1].ukuran }}</span>
-                  <span v-if="printPreviewData[(i - 1) * 2 + 1].charga">{{ printPreviewData[(i - 1) * 2 + 1].charga
+                <div class="text-small">
+                  {{ printPreviewData[(i - 1) * 2 + j].ukuran }}
+                </div>
+                <svg
+                  class="barcode-svg"
+                  :data-barcode-value="
+                    printPreviewData[(i - 1) * 2 + j].barcode
+                  "
+                ></svg>
+                <div class="label-footer-preview">
+                  <span>{{ printPreviewData[(i - 1) * 2 + j].barcode }}</span>
+                  <span class="font-weight-black">{{
+                    printPreviewData[(i - 1) * 2 + j].charga
                   }}</span>
                 </div>
-              </div>
-              <div v-else class="barcode-label barcode-label-empty"></div>
+              </template>
             </div>
           </div>
-        </v-card-text>
+        </div>
+      </v-card-text>
 
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closePreviewAndNavigate">Tutup</v-btn>
-          <v-btn color="primary" @click="triggerBrowserPrint" prepend-icon="mdi-printer">
-            Cetak via Browser
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+      <v-card-actions class="pa-4 border-t bg-white">
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="closePrintPreview">Selesai</v-btn>
+        <v-btn
+          color="primary"
+          variant="elevated"
+          prepend-icon="mdi-printer"
+          @click="triggerPrint"
+          >Cetak Sekarang</v-btn
+        >
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
-    <ItemLookupModal v-model="isLookupVisible" source="cetak-barcode" @item-selected="onItemSelected"
-      @close="closeLookupModal" />
-
-  </PageLayout>
+  <ItemLookupModal
+    v-model="isLookupVisible"
+    source="barcode"
+    @item-selected="onItemSelected"
+  />
 </template>
 
 <style scoped>
-.form-grid-container :deep(*) {
-  font-size: 11px !important;
-}
-
-/* Layout utama dengan latar abu-abu */
-.form-grid-container {
-  padding: 12px;
-  height: calc(100vh - 100px);
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 16px;
-}
-
-/* Overlay Card (Putih bersih dengan bayangan halus) */
-.desktop-form-section {
-  padding: 16px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background-color: white !important;
-}
-
-/* Aksen garis biru di samping kiri box setting */
-.border-left-blue {
-  border-left: 4px solid #1976D2 !important;
-}
-
-/* Header Tabel Biru Primary */
 .colored-header :deep(thead th) {
-  background-color: #1976D2 !important;
+  background-color: #1976d2 !important;
   color: white !important;
   font-weight: bold !important;
   text-transform: uppercase;
-  font-size: 11px;
 }
 
-/* Style input jumlah agar angka tebal dan rata kanan */
+.desktop-table :deep(td) {
+  border-right: 1px solid #e0e0e0;
+}
+
 .text-right-input :deep(input) {
   text-align: right;
   font-weight: bold;
+  color: #1976d2;
 }
-
-/* Hilangkan Spinner Angka */
-:deep(input::-webkit-outer-spin-button),
-:deep(input::-webkit-inner-spin-button) {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
 .cursor-pointer {
   cursor: pointer;
 }
-
-/* Layouting Column */
-.left-column,
-.right-column {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+.border-l-primary {
+  border-left: 4px solid #1976d2 !important;
 }
 
-.right-column {
-  flex-grow: 1;
-}
-</style>
-
-<style>
-/* === STYLE GLOBAL UNTUK PREVIEW & CETAK === */
-
-/* Preview container */
-#print-area {
-  background-color: #f5f5f5;
-  padding: 16px;
+/* Preview Styles */
+.preview-label-box {
+  width: 180px;
+  height: 95px;
+  background: white;
+  border: 1px dashed #ccc;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  box-sizing: border-box;
-  overflow-y: auto;
+  justify-content: center;
+  padding: 4px;
+  font-size: 8px;
 }
-
-/* Setiap baris label (2 kolom) - lebih lebar untuk mengisi ruang */
-.label-pair-container {
-  width: 148mm;
-  /* Diperbesar dari 136mm */
-  height: 32mm;
-  /* Diperbesar dari 30mm */
-  background-color: white;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-  border-radius: 2px;
+.label-footer-preview {
   display: flex;
   justify-content: space-between;
-  align-items: stretch;
-  box-sizing: border-box;
-  flex-shrink: 0;
-  padding: 0;
-  margin: 0;
+  width: 100%;
+  font-size: 7px;
+  margin-top: 2px;
 }
-
-/* Label individual */
-.barcode-label {
-  width: 74mm;
-  /* 50% dari 148mm */
-  height: 32mm;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  font-family: Arial, sans-serif;
-  padding: 2mm;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.barcode-label-empty {
-  visibility: hidden;
-}
-
-/* Info teks */
-.item-info {
+.text-bold {
+  font-weight: bold;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
-  line-height: 1.2;
-  margin: 0;
-  color: #333;
-}
-
-.item-name {
-  font-weight: bold;
-  font-size: 11px;
-  margin-bottom: 1mm;
-}
-
-.item-size {
-  font-size: 9px;
-  font-weight: normal;
-  margin-bottom: 2mm;
-}
-
-.barcode-svg {
-  width: 95%;
-  max-width: 100%;
-  height: auto;
-  margin: 2mm 0;
-  display: block;
-}
-
-.label-footer {
-  font-size: 7px;
-  display: flex;
-  justify-content: space-between;
-  width: 95%;
-  margin-top: 1mm;
-  gap: 3px;
-}
-
-
-/* --- MODE PRINT --- */
-@media print {
-  @page {
-    size: 68mm 15mm;
-    margin: 0;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  #print-area,
-  #print-area * {
-    visibility: visible;
-  }
-
-  #print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    background: white;
-    padding: 0;
-    display: block;
-  }
-
-  .label-pair-container {
-    width: 68mm;
-    height: 15mm;
-    box-shadow: none;
-    border-radius: 0;
-    page-break-after: always;
-    margin: 0;
-  }
-
-  .barcode-label {
-    width: 33mm;
-    height: 15mm;
-    padding: 0.5mm;
-  }
-
-  .item-name {
-    font-size: 5px;
-  }
-
-  .item-size {
-    font-size: 4px;
-  }
-
-  .label-footer {
-    font-size: 3px;
-  }
-
-  .barcode-svg {
-    width: 90%;
-  }
+  width: 100%;
+  text-align: center;
 }
 </style>

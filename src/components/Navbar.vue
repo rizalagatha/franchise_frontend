@@ -1,64 +1,63 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '@/stores/authStore';
-import logoSrc from '@/assets/logo.png'; // Pastikan Anda sudah menyalin logo.png ke src/assets/
-import { usePasswordDialog } from '@/composables/usePasswordDialog'; // Kita masih perlu ini
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/authStore";
+import logoSrc from "@/assets/logo.png"; // Pastikan Anda sudah menyalin logo.png ke src/assets/
+import { usePasswordDialog } from "@/composables/usePasswordDialog"; // Kita masih perlu ini
 
 interface NavItem {
-  title: string
-  to?: string
-  icon?: string
-  divider?: boolean
-  subItems?: NavItem[]
-  onClick?: () => void
+  title: string;
+  to?: string;
+  icon?: string;
+  divider?: boolean;
+  subItems?: NavItem[];
+  onClick?: () => void;
 }
 
 interface MenuSection {
-  title: string
-  icon: string
-  items: NavItem[]
+  title: string;
+  icon: string;
+  items: NavItem[];
 }
 
 interface MenuItem {
-  title: string
-  icon: string
-  model: any
-  items?: NavItem[]
-  sections?: MenuSection[]
-  isLarge?: boolean
+  title: string;
+  icon: string;
+  model: any;
+  items?: NavItem[];
+  sections?: MenuSection[];
+  isLarge?: boolean;
 }
 
 // Stores and composables
-const authStore = useAuthStore()
-const router = useRouter()
+const authStore = useAuthStore();
+const router = useRouter();
 const { openPasswordDialog } = usePasswordDialog();
 
 // Component state
-const scrolled = ref(false)
-const userMenu = ref(false)
+const scrolled = ref(false);
+const userMenu = ref(false);
 
 // State menu baru untuk Franchise
-const daftarMenu = ref(false)
-const transaksiMenu = ref(false)
-const laporanMenu = ref(false)
-const toolsMenu = ref(false)
-
+const daftarMenu = ref(false);
+const transaksiMenu = ref(false);
+const laporanMenu = ref(false);
+const toolsMenu = ref(false);
 
 // Computed properties
-const appBarElevation = computed(() => scrolled.value ? 2 : 0)
+const appBarElevation = computed(() => (scrolled.value ? 2 : 0));
 const appBarClass = computed(() => ({
-  'navbar-scrolled': scrolled.value
-}))
+  "navbar-scrolled": scrolled.value,
+}));
 
 // Access control helper (Sama seperti retail)
 const hasAccess = (routeNameOrPath?: string) => {
   if (!routeNameOrPath) return true;
 
   const authStore = useAuthStore();
-  const route = router.getRoutes().find(
-    r => r.name === routeNameOrPath || r.path === routeNameOrPath
-  );
+  const route = router
+    .getRoutes()
+    .find((r) => r.name === routeNameOrPath || r.path === routeNameOrPath);
 
   if (!route) return false;
 
@@ -85,94 +84,158 @@ const hasAccess = (routeNameOrPath?: string) => {
 // Menu configuration (BARU UNTUK FRANCHISE)
 const menuItems: MenuItem[] = [
   {
-    title: 'Daftar',
-    icon: 'mdi-clipboard-list-outline',
+    title: "Daftar",
+    icon: "mdi-clipboard-list-outline",
     model: daftarMenu,
     items: [
-      { title: 'Customer', to: '/daftar/customer', icon: 'mdi-account-outline' },
-      { title: 'Price List', to: '/daftar/price-list', icon: 'mdi-format-list-numbered' },
-      { title: 'Cetak Barcode', to: '/daftar/cetak-barcode', icon: 'mdi-barcode' },
-      { title: 'Rekening Bank', to: '/daftar/rekening', icon: 'mdi-bank-outline' }
-    ]
+      {
+        title: "Customer",
+        to: "/daftar/customer",
+        icon: "mdi-account-outline",
+      },
+      {
+        title: "Price List",
+        to: "/daftar/price-list",
+        icon: "mdi-format-list-numbered",
+      },
+      {
+        title: "Cetak Barcode",
+        to: "/daftar/cetak-barcode",
+        icon: "mdi-barcode",
+      },
+      {
+        title: "Rekening Bank",
+        to: "/daftar/rekening",
+        icon: "mdi-bank-outline",
+      },
+    ],
   },
   {
-    title: 'Transaksi',
-    icon: 'mdi-cash-register',
+    title: "Transaksi",
+    icon: "mdi-cash-register",
     model: transaksiMenu,
     items: [
-      { title: 'Pembelian', to: '/transaksi/pembelian', icon: 'mdi-cart-arrow-down' },
-      { title: 'Koreksi Stok', to: '/transaksi/koreksi-stok', icon: 'mdi-pencil-outline' },
-      { title: 'Standar Stok', to: '/transaksi/standar-stok', icon: 'mdi-database-outline' },
-      { title: 'Kasir', to: '/transaksi/kasir', icon: 'mdi-cash-register' },
-      { title: 'Form Setoran Kasir', to: '/transaksi/fsk', icon: 'mdi-cash-multiple' },
-      { title: 'Setoran Pembayaran', to: '/transaksi/setoran-pembayaran', icon: 'mdi-bank-transfer' }
-    ]
+      {
+        title: "Pembelian",
+        to: "/transaksi/pembelian",
+        icon: "mdi-cart-arrow-down",
+      },
+      {
+        title: "Minta Barang Pusat",
+        to: "/transaksi/minta-barang-kaosan",
+        icon: "mdi-truck-delivery-outline",
+      },
+      {
+        title: "Koreksi Stok",
+        to: "/transaksi/koreksi-stok",
+        icon: "mdi-pencil-outline",
+      },
+      {
+        title: "Standar Stok",
+        to: "/transaksi/standar-stok",
+        icon: "mdi-database-outline",
+      },
+      { title: "Kasir", to: "/transaksi/kasir", icon: "mdi-cash-register" },
+      {
+        title: "Form Setoran Kasir",
+        to: "/transaksi/fsk",
+        icon: "mdi-cash-multiple",
+      },
+      {
+        title: "Setoran Pembayaran",
+        to: "/transaksi/setoran-pembayaran",
+        icon: "mdi-bank-transfer",
+      },
+    ],
   },
   {
-    title: 'Laporan',
-    icon: 'mdi-chart-box-outline',
+    title: "Laporan",
+    icon: "mdi-chart-box-outline",
     model: laporanMenu,
     isLarge: true, // Kita gunakan layout sectioned agar rapi
     sections: [
       {
-        title: 'Stok',
-        icon: 'mdi-archive-outline',
+        title: "Stok",
+        icon: "mdi-archive-outline",
         items: [
-          { title: 'Laporan Stok', to: '/laporan/stok', icon: 'mdi-package-variant' }
-        ]
+          {
+            title: "Laporan Stok",
+            to: "/laporan/stok",
+            icon: "mdi-package-variant",
+          },
+        ],
       },
       {
-        title: 'Penjualan',
-        icon: 'mdi-trending-up',
+        title: "Penjualan",
+        icon: "mdi-trending-up",
         items: [
-          { title: 'Laporan Penjualan', to: '/laporan/penjualan', icon: 'mdi-receipt' }
-        ]
-      }
-    ]
+          {
+            title: "Laporan Penjualan",
+            to: "/laporan/penjualan",
+            icon: "mdi-receipt",
+          },
+        ],
+      },
+    ],
   },
   {
-    title: 'Tools',
-    icon: 'mdi-wrench-outline',
+    title: "Tools",
+    icon: "mdi-wrench-outline",
     model: toolsMenu,
     items: [
-      { title: 'Backup Data', to: '/tools/backup', icon: 'mdi-database-export-outline' },
-      { title: 'Master User', to: '/tools/users', icon: 'mdi-account-group-outline' }
-    ]
-  }
-]
+      {
+        title: "Backup Data",
+        to: "/tools/backup",
+        icon: "mdi-database-export-outline",
+      },
+      {
+        title: "Master User",
+        to: "/tools/users",
+        icon: "mdi-account-group-outline",
+      },
+    ],
+  },
+];
 
 // Menu control methods
 const closeMenus = () => {
-  menuItems.forEach(menu => {
+  menuItems.forEach((menu) => {
     if (menu.model && menu.model.value) {
-      menu.model.value = false
+      menu.model.value = false;
     }
-  })
-}
+  });
+};
 
 // Event handlers
 const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
-}
+  authStore.logout();
+  router.push("/login");
+};
 
 const handleScroll = () => {
-  scrolled.value = window.scrollY > 10
-}
+  scrolled.value = window.scrollY > 10;
+};
 
 // Lifecycle hooks
 onMounted(() => {
-  window.addEventListener('scroll', handleScroll)
-})
+  window.addEventListener("scroll", handleScroll);
+});
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll)
-})
+  window.removeEventListener("scroll", handleScroll);
+});
 </script>
 
 <template>
-  <v-app-bar flat color="white" height="64" :elevation="appBarElevation" :class="appBarClass" fixed
-    class="desktop-navbar">
+  <v-app-bar
+    flat
+    color="white"
+    height="64"
+    :elevation="appBarElevation"
+    :class="appBarClass"
+    fixed
+    class="desktop-navbar"
+  >
     <!-- Logo Section -->
     <RouterLink to="/" class="logo-section">
       <v-avatar size="32" class="logo-avatar">
@@ -190,48 +253,89 @@ onUnmounted(() => {
     <nav class="main-navigation">
       <template v-for="menu in menuItems" :key="menu.title">
         <!-- Standard Menu Items (non-Large) -->
-        <v-menu v-if="!menu.isLarge && (!('to' in menu) || hasAccess(menu.to as string))" v-model="menu.model.value"
-          offset-y :close-on-content-click="false" transition="fade-transition" class="nav-menu"
-          location="bottom center" origin="top center">
+        <v-menu
+          v-if="
+            !menu.isLarge && (!('to' in menu) || hasAccess(menu.to as string))
+          "
+          v-model="menu.model.value"
+          offset-y
+          :close-on-content-click="false"
+          transition="fade-transition"
+          class="nav-menu"
+          location="bottom center"
+          origin="top center"
+        >
           <template #activator="{ props }">
-            <v-btn variant="text" v-bind="props" :prepend-icon="menu.icon" class="nav-button" size="default">
+            <v-btn
+              variant="text"
+              v-bind="props"
+              :prepend-icon="menu.icon"
+              class="nav-button"
+              size="default"
+            >
               {{ menu.title }}
             </v-btn>
           </template>
 
           <v-card class="nav-dropdown" elevation="8">
             <v-list class="nav-list" density="comfortable">
-              <template v-for="(item, index) in (menu.items ?? []).filter(i => !i.to || hasAccess(i.to))" :key="index">
+              <template
+                v-for="(item, index) in (menu.items ?? []).filter(
+                  (i) => !i.to || hasAccess(i.to),
+                )"
+                :key="index"
+              >
                 <v-divider v-if="item.divider" class="nav-divider" />
 
                 <!-- Sub Menu Group -->
-                <v-list-group v-else-if="'subItems' in item" :value="item.title" class="nav-list-group">
+                <v-list-group
+                  v-else-if="'subItems' in item"
+                  :value="item.title"
+                  class="nav-list-group"
+                >
                   <template #activator="{ props }">
-                    <v-list-item v-bind="props" :prepend-icon="item.icon" class="nav-list-item">
+                    <v-list-item
+                      v-bind="props"
+                      :prepend-icon="item.icon"
+                      class="nav-list-item"
+                    >
                       <v-list-item-title>{{ item.title }}</v-list-item-title>
                     </v-list-item>
                   </template>
 
                   <template
-                    v-for="subItem in ((item.subItems as NavItem[] | undefined) ?? []).filter(si => hasAccess(si.to))"
-                    :key="subItem.title">
+                    v-for="subItem in (
+                      (item.subItems as NavItem[] | undefined) ?? []
+                    ).filter((si) => hasAccess(si.to))"
+                    :key="subItem.title"
+                  >
                     <!-- Regular Sub Item -->
-                    <v-list-item :to="subItem.to" :prepend-icon="subItem.icon" class="nav-list-item sub"
-                      @click="closeMenus">
+                    <v-list-item
+                      :to="subItem.to"
+                      :prepend-icon="subItem.icon"
+                      class="nav-list-item sub"
+                      @click="closeMenus"
+                    >
                       <v-list-item-title>{{ subItem.title }}</v-list-item-title>
                     </v-list-item>
                   </template>
                 </v-list-group>
 
                 <!-- Regular Menu Item -->
-                <v-list-item v-else :to="item.to" :prepend-icon="item.icon" class="nav-list-item" @click="
-                  () => {
-                    if (item.onClick) {
-                      item.onClick();
+                <v-list-item
+                  v-else
+                  :to="item.to"
+                  :prepend-icon="item.icon"
+                  class="nav-list-item"
+                  @click="
+                    () => {
+                      if (item.onClick) {
+                        item.onClick();
+                      }
+                      closeMenus();
                     }
-                    closeMenus();
-                  }
-                ">
+                  "
+                >
                   <v-list-item-title>{{ item.title }}</v-list-item-title>
                 </v-list-item>
               </template>
@@ -240,10 +344,23 @@ onUnmounted(() => {
         </v-menu>
 
         <!-- Large Menu Items with Sections -->
-        <v-menu v-else-if="menu.isLarge" v-model="menu.model.value" offset-y :max-width="1000"
-          transition="fade-transition" :close-on-content-click="false" class="nav-menu large">
+        <v-menu
+          v-else-if="menu.isLarge"
+          v-model="menu.model.value"
+          offset-y
+          :max-width="1000"
+          transition="fade-transition"
+          :close-on-content-click="false"
+          class="nav-menu large"
+        >
           <template #activator="{ props }">
-            <v-btn variant="text" v-bind="props" :prepend-icon="menu.icon" class="nav-button" size="default">
+            <v-btn
+              variant="text"
+              v-bind="props"
+              :prepend-icon="menu.icon"
+              class="nav-button"
+              size="default"
+            >
               {{ menu.title }}
             </v-btn>
           </template>
@@ -251,32 +368,69 @@ onUnmounted(() => {
           <v-card class="large-nav-dropdown" elevation="8">
             <v-container fluid class="pa-4">
               <v-row>
-                <v-col v-for="section in (menu.sections ?? [])" :key="section.title"
-                  :cols="12 / ((menu.sections ?? []).length || 1)" class="section-col">
+                <v-col
+                  v-for="section in menu.sections ?? []"
+                  :key="section.title"
+                  :cols="12 / ((menu.sections ?? []).length || 1)"
+                  class="section-col"
+                >
                   <div class="section-header">
-                    <v-icon :icon="section.icon" size="18" class="section-icon" />
+                    <v-icon
+                      :icon="section.icon"
+                      size="18"
+                      class="section-icon"
+                    />
                     <h4 class="section-title">{{ section.title }}</h4>
                   </div>
 
                   <v-list density="compact" class="section-list">
-                    <template v-for="item in section.items.filter(i => !i.to || hasAccess(i.to))" :key="item.title">
+                    <template
+                      v-for="item in section.items.filter(
+                        (i) => !i.to || hasAccess(i.to),
+                      )"
+                      :key="item.title"
+                    >
                       <!-- Section Sub Items -->
-                      <v-list-group v-if="item.subItems" :value="item.title" class="section-list-group">
+                      <v-list-group
+                        v-if="item.subItems"
+                        :value="item.title"
+                        class="section-list-group"
+                      >
                         <template #activator="{ props }">
-                          <v-list-item v-bind="props" :prepend-icon="item.icon" :title="item.title"
-                            class="section-list-item" />
+                          <v-list-item
+                            v-bind="props"
+                            :prepend-icon="item.icon"
+                            :title="item.title"
+                            class="section-list-item"
+                          />
                         </template>
-                        <template v-for="subItem in item.subItems.filter(si => hasAccess(si.to))" :key="subItem.title">
-                          <v-list-item :to="subItem.to" :prepend-icon="subItem.icon" class="section-list-item sub"
-                            @click="closeMenus">
-                            <v-list-item-title>{{ subItem.title }}</v-list-item-title>
+                        <template
+                          v-for="subItem in item.subItems.filter((si) =>
+                            hasAccess(si.to),
+                          )"
+                          :key="subItem.title"
+                        >
+                          <v-list-item
+                            :to="subItem.to"
+                            :prepend-icon="subItem.icon"
+                            class="section-list-item sub"
+                            @click="closeMenus"
+                          >
+                            <v-list-item-title>{{
+                              subItem.title
+                            }}</v-list-item-title>
                           </v-list-item>
                         </template>
                       </v-list-group>
 
                       <!-- Regular Section Item -->
-                      <v-list-item v-else :to="item.to" :prepend-icon="item.icon" class="section-list-item"
-                        @click="closeMenus">
+                      <v-list-item
+                        v-else
+                        :to="item.to"
+                        :prepend-icon="item.icon"
+                        class="section-list-item"
+                        @click="closeMenus"
+                      >
                         <v-list-item-title>{{ item.title }}</v-list-item-title>
                       </v-list-item>
                     </template>
@@ -292,7 +446,12 @@ onUnmounted(() => {
     <v-spacer />
 
     <!-- User Menu -->
-    <v-menu v-model="userMenu" offset-y transition="fade-transition" class="user-menu">
+    <v-menu
+      v-model="userMenu"
+      offset-y
+      transition="fade-transition"
+      class="user-menu"
+    >
       <template #activator="{ props }">
         <v-btn variant="text" v-bind="props" class="user-button">
           <v-avatar color="primary" size="28" class="user-avatar">
@@ -308,23 +467,37 @@ onUnmounted(() => {
           <v-list-item class="user-profile-item">
             <template #prepend>
               <v-avatar color="primary" size="32">
-                <span class="user-profile-initial">{{ authStore.userInitial }}</span>
+                <span class="user-profile-initial">{{
+                  authStore.userInitial
+                }}</span>
               </v-avatar>
             </template>
-            <v-list-item-title class="user-profile-name">{{ authStore.userName }}</v-list-item-title>
-            <v-list-item-subtitle class="user-profile-branch">{{ authStore.userCabang }}</v-list-item-subtitle>
+            <v-list-item-title class="user-profile-name">{{
+              authStore.userName
+            }}</v-list-item-title>
+            <v-list-item-subtitle class="user-profile-branch">{{
+              authStore.userCabang
+            }}</v-list-item-subtitle>
           </v-list-item>
 
           <v-divider class="user-divider" />
 
           <!-- Hapus Tautkan WhatsApp, hanya sisakan Ganti Password -->
-          <v-list-item @click="openPasswordDialog" prepend-icon="mdi-lock-outline" class="user-menu-item">
+          <v-list-item
+            @click="openPasswordDialog"
+            prepend-icon="mdi-lock-outline"
+            class="user-menu-item"
+          >
             <v-list-item-title>Ganti Password</v-list-item-title>
           </v-list-item>
 
           <v-divider class="user-divider" />
 
-          <v-list-item @click="handleLogout" prepend-icon="mdi-logout" class="user-menu-item logout">
+          <v-list-item
+            @click="handleLogout"
+            prepend-icon="mdi-logout"
+            class="user-menu-item logout"
+          >
             <v-list-item-title>Logout</v-list-item-title>
           </v-list-item>
         </v-list>
@@ -483,7 +656,11 @@ onUnmounted(() => {
   align-items: center;
   padding: 8px 12px;
   margin-bottom: 8px;
-  background: linear-gradient(135deg, rgba(25, 118, 210, 0.06) 0%, rgba(25, 118, 210, 0.02) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(25, 118, 210, 0.06) 0%,
+    rgba(25, 118, 210, 0.02) 100%
+  );
   border-left: 3px solid #1976d2;
 }
 
@@ -641,7 +818,6 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-
 .section-col {
   min-width: 400px;
   flex: 1;
@@ -700,15 +876,21 @@ onUnmounted(() => {
 
 /* Subtle shadows and elevation */
 .nav-dropdown {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .large-nav-dropdown {
-  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 8px 25px -5px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 .user-dropdown {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 /* Icon consistency */

@@ -28,6 +28,9 @@ import LaporanStokView from "@/views/LaporanStokView.vue";
 import LaporanPenjualanView from "@/views/LaporanPenjualanView.vue";
 import UserBrowseView from "@/views/UserBrowseView.vue";
 import UserFormView from "@/views/UserFormView.vue";
+import MintaBarangKaosanView from "@/views/MintaBarangKaosanView.vue";
+import MintaBarangKaosanFormView from "@/views/MintaBarangKaosanFormView.vue";
+import PerusahaanView from "@/views/PerusahaanView.vue"; // Tambahan untuk Perusahaan
 
 const routes = [
   {
@@ -336,22 +339,48 @@ const routes = [
   },
   {
     path: "/tools/users",
-    name: "UserBrowse",
+    name: "Browse User",
     component: UserBrowseView,
     meta: { requiresAuth: true, menuId: "1" },
   },
   {
     path: "/tools/users/baru",
-    name: "UserBaru",
+    name: "Buat User Baru",
     component: UserFormView,
     meta: { requiresAuth: true, menuId: "1" },
   },
   // Rute Edit
   {
     path: "/tools/users/ubah/:kode",
-    name: "UserUbah",
+    name: "Edit User",
     component: UserFormView,
     meta: { requiresAuth: true, menuId: "1" },
+  },
+  {
+    path: "/transaksi/minta-barang-kaosan",
+    name: "MintaBarangKaosanBrowse",
+    component: MintaBarangKaosanView,
+    meta: { requiresAuth: true, menuId: "25", title: "Minta Barang Pusat" },
+  },
+  {
+    path: "/transaksi/minta-barang-kaosan/baru",
+    name: "MintaBarangKaosanCreate",
+    component: MintaBarangKaosanFormView,
+    meta: {
+      requiresAuth: true,
+      menuId: "25",
+      title: "Buat Permintaan Barang",
+    },
+  },
+  {
+    path: "/transaksi/minta-barang-kaosan/ubah/:nomor",
+    name: "MintaBarangKaosanEdit",
+    component: MintaBarangKaosanFormView,
+    meta: {
+      requiresAuth: true,
+      menuId: "25",
+      title: "Ubah Permintaan Barang",
+    },
   },
 ];
 

@@ -1,333 +1,141 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
-import api from "@/services/api";
-import PageLayout from "@/components/PageLayout.vue";
-import { useToast } from "vue-toastification";
-import { useAuthStore } from "@/stores/authStore";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
+import api from "@/services/api";
+import { useToast } from "vue-toastification";
 import * as XLSX from "xlsx";
 
+// Components & Composables
+import BaseBrowse from "@/components/BaseBrowse.vue";
+import ConfirmDeleteDialog from "@/components/dialogs/ConfirmDeleteDialog.vue";
+import { useBrowse } from "@/composables/useBrowse";
+
 const toast = useToast();
-const authStore = useAuthStore();
 const router = useRouter();
 const MENU_ID = "1"; // Menu ID untuk Master User
 
-// --- State ---
-const masterData = ref<any[]>([]);
-const selected = ref<any[]>([]);
-const isLoading = ref(false);
-const search = ref("");
-const isDeleting = ref(false);
+// 1. Setup Composable Logic
+const { items, isLoading, canInsert, canEdit, canDelete, selected, fetchData } =
+  useBrowse({
+    menuId: MENU_ID,
+    fetchApi: async () => {
+      const response = await api.get("/users");
+      return response.data;
+    },
+  });
 
-// State Konfirmasi Hapus
-const showConfirmDelete = ref(false);
-const itemToDelete = ref<string>("");
-
-// Hak Akses
-const canView = computed(() => authStore.can(MENU_ID, "view"));
-const canInsert = computed(() => authStore.can(MENU_ID, "insert"));
-const canEdit = computed(() => authStore.can(MENU_ID, "edit"));
-const canDelete = computed(() => authStore.can(MENU_ID, "delete"));
-
-const isSingleSelected = computed(() => selected.value.length === 1);
-
-// --- Header Tabel ---
-const headers: any[] = [
+// 2. Table Headers
+const headers = [
   { title: "Kode", key: "Kode", width: "150px" },
   { title: "Nama", key: "Nama" },
-  { title: "Aktif", key: "Aktif", width: "100px", align: "center" },
+  { title: "Aktif", key: "Aktif", width: "100px", align: "center" as const },
 ];
 
-// --- Methods ---
-const fetchData = async () => {
-  isLoading.value = true;
-  selected.value = []; // Reset selected state saat load ulang
-  try {
-    const response = await api.get("/users");
-    masterData.value = response.data;
-  } catch (error) {
-    toast.error("Gagal memuat data user.");
-  } finally {
-    isLoading.value = false;
-  }
+// 3. Logika Pewarnaan Baris (Merah jika Pasif)
+const getRowProps = (data: any) => {
+  const raw = data.item?.raw || data.item;
+  if (raw.Aktif === "N") return { class: "text-error font-weight-bold" };
+  return {};
 };
 
-// Logika pewarnaan baris (Merah jika Pasif)
-const getRowTextColor = (item: any) => {
-  if (!item) return "";
-  return item.Aktif === "N" ? "text-red-darken-2" : "";
+// 4. Navigasi & Aksi
+const handleAdd = () => router.push("/tools/users/baru");
+const handleEdit = (item: any) => router.push(`/tools/users/ubah/${item.Kode}`);
+
+const handleExport = () => {
+  // Tambahkan fallback array kosong di sini
+  const currentItems = items.value || [];
+
+  if (currentItems.length === 0) return toast.warning("Data kosong.");
+
+  // Gunakan currentItems yang sudah dijamin Array
+  const worksheet = XLSX.utils.json_to_sheet(currentItems);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Data User");
+  XLSX.writeFile(workbook, "Master_User.xlsx");
 };
 
-const handleRowClick = (event: PointerEvent, { item }: { item: any }) => {
-  // Toggle selection: jika klik baris yang sama, kosongkan. Jika beda, pilih yang baru.
-  if (selected.value.length > 0 && selected.value[0].Kode === item.Kode) {
-    selected.value = [];
-  } else {
-    selected.value = [item];
-  }
-};
+// 5. State & Logika Delete
+const showDeleteDialog = ref(false);
+const itemToDelete = ref<any>(null);
+const isDeleting = ref(false);
 
-// Row Props untuk tabel
-const myRowProps = (data: any) => {
-  const rawItem = data.item?.raw || data.item;
-  return {
-    class: getRowTextColor(rawItem),
-    style: "cursor: pointer",
-  };
-};
-
-const handleEdit = () => {
-  const target = selected.value?.[0];
-  const kode = typeof target === "object" ? target?.Kode : target;
-  if (kode) {
-    router.push(`/tools/users/ubah/${kode}`);
-  } else {
-    toast.warning("Pilih satu data untuk diubah.");
-  }
-};
-
-const confirmDelete = () => {
-  const target = selected.value?.[0];
-  const kode = typeof target === "object" ? target?.Kode : target;
-
-  if (!kode) return toast.warning("Pilih satu data untuk dihapus.");
-
-  // Proteksi khusus ADMIN
-  if (kode === "ADMIN") {
+const handleDeleteClick = (item: any) => {
+  if (item.Kode === "ADMIN") {
     return toast.error("User Admin tidak boleh dihapus.");
   }
-
-  itemToDelete.value = kode;
-  showConfirmDelete.value = true;
+  itemToDelete.value = item;
+  showDeleteDialog.value = true;
 };
 
 const executeDelete = async () => {
   if (!itemToDelete.value) return;
   isDeleting.value = true;
   try {
-    await api.delete(`/users/${itemToDelete.value}`);
+    await api.delete(`/users/${itemToDelete.value.Kode}`);
     toast.success("Data berhasil dihapus.");
-    showConfirmDelete.value = false;
-    fetchData(); // Reload data
+    showDeleteDialog.value = false;
+    fetchData();
   } catch (error: any) {
     toast.error(error.response?.data?.message || "Gagal menghapus data.");
   } finally {
     isDeleting.value = false;
   }
 };
-
-const handleExport = () => {
-  if (masterData.value.length === 0) return toast.warning("Data kosong.");
-  const worksheet = XLSX.utils.json_to_sheet(masterData.value);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Data User");
-  XLSX.writeFile(workbook, "Master_User.xlsx");
-};
-
-onMounted(() => {
-  if (canView.value) fetchData();
-});
 </script>
 
 <template>
-  <PageLayout
+  <BaseBrowse
+    v-model:selected="selected"
+    item-value="Kode"
     title="Browse Data User"
-    :menu-id="MENU_ID"
+    menu-id="1"
     icon="mdi-account-group-outline"
+    search-placeholder="Cari User..."
+    :headers="headers"
+    :items="items || []"
+    :is-loading="isLoading"
+    :can-insert="canInsert"
+    :can-edit="canEdit"
+    :can-delete="canDelete"
+    :can-export="true"
+    :row-props-fn="getRowProps"
+    @refresh="fetchData"
+    @add="handleAdd"
+    @edit="handleEdit"
+    @delete="handleDeleteClick"
+    @export="handleExport"
   >
-    <template #header-actions>
-      <v-btn
-        v-if="canInsert"
-        size="small"
-        color="primary"
-        prepend-icon="mdi-plus"
-        @click="router.push('/tools/users/baru')"
-        >Baru</v-btn
-      >
-      <v-btn
-        v-if="canEdit"
-        size="small"
-        :disabled="!isSingleSelected"
-        prepend-icon="mdi-pencil"
-        @click="handleEdit"
-        >Ubah</v-btn
-      >
-      <v-btn
-        v-if="canDelete"
-        size="small"
-        color="error"
-        :disabled="!isSingleSelected"
-        prepend-icon="mdi-delete"
-        @click="confirmDelete"
-        >Hapus</v-btn
-      >
-      <v-btn
-        size="small"
-        color="green"
-        prepend-icon="mdi-file-excel"
-        @click="handleExport"
-        >Export</v-btn
-      >
-      <v-btn
-        size="small"
-        variant="text"
-        prepend-icon="mdi-close"
-        @click="router.back()"
-        >Tutup</v-btn
-      >
+    <template #filter-right>
+      <div class="d-flex align-center">
+        <v-icon color="error" size="small" class="mr-1">mdi-circle</v-icon>
+        <span class="text-caption font-weight-bold text-error">User Pasif</span>
+      </div>
     </template>
 
-    <div v-if="canView" class="browse-content">
-      <div
-        class="filter-section d-flex align-center px-4 py-2 bg-white border-b mb-3"
+    <template #[`item.Aktif`]="{ value }">
+      <v-chip
+        :color="value === 'Y' ? 'success' : 'error'"
+        size="x-small"
+        variant="flat"
+        class="font-weight-bold"
       >
-        <div class="d-flex align-center mr-4">
-          <v-badge color="error" dot class="mr-2"></v-badge>
-          <span class="text-caption font-weight-bold text-error"
-            >User Pasif</span
-          >
-        </div>
-        <v-spacer></v-spacer>
-        <v-text-field
-          v-model="search"
-          label="Cari User..."
-          density="compact"
-          variant="outlined"
-          hide-details
-          prepend-inner-icon="mdi-magnify"
-          style="max-width: 300px"
-          class="mr-2"
-        />
-        <v-btn
-          @click="fetchData"
-          color="primary"
-          icon="mdi-refresh"
-          variant="text"
-          :loading="isLoading"
-          size="small"
-        ></v-btn>
-      </div>
+        {{ value === "Y" ? "AKTIF" : "NON-AKTIF" }}
+      </v-chip>
+    </template>
+  </BaseBrowse>
 
-      <div class="table-container">
-        <v-data-table
-          v-model="selected"
-          :headers="headers"
-          :items="masterData"
-          :search="search"
-          :loading="isLoading"
-          item-value="Kode"
-          select-strategy="single"
-          return-object
-          show-select
-          density="compact"
-          fixed-header
-          class="desktop-table fill-height-table colored-header zebra-table"
-          @click:row="handleRowClick"
-          :items-per-page="50"
-        >
-          <template #[`item.Aktif`]="{ value }">
-            <v-chip
-              :color="value === 'Y' ? 'success' : 'error'"
-              size="x-small"
-              variant="flat"
-              class="font-weight-bold"
-            >
-              {{ value === "Y" ? "AKTIF" : "NON-AKTIF" }}
-            </v-chip>
-          </template>
-
-          <template v-slot:loading>
-            <v-skeleton-loader type="table-row@10"></v-skeleton-loader>
-          </template>
-        </v-data-table>
-      </div>
-    </div>
-
-    <v-dialog v-model="showConfirmDelete" max-width="400px">
-      <v-card class="rounded-lg">
-        <v-card-title class="text-h6 pa-4 d-flex align-center">
-          <v-icon color="error" class="mr-2">mdi-delete-alert</v-icon>
-          Konfirmasi Hapus
-        </v-card-title>
-        <v-card-text class="pa-4 pt-0">
-          Yakin ingin menghapus user <strong>{{ itemToDelete }}</strong
-          >?
-        </v-card-text>
-        <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn
-            variant="text"
-            @click="showConfirmDelete = false"
-            :disabled="isDeleting"
-            >Batal</v-btn
-          >
-          <v-btn
-            color="error"
-            variant="elevated"
-            @click="executeDelete"
-            :loading="isDeleting"
-            >Ya, Hapus</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </PageLayout>
+  <ConfirmDeleteDialog
+    v-model="showDeleteDialog"
+    :item-name="`User ${itemToDelete?.Kode}`"
+    :is-loading="isDeleting"
+    @confirm="executeDelete"
+  />
 </template>
 
 <style scoped>
-/* 1. Paksa Konsistensi Font 11px */
-.browse-content :deep(*) {
-  font-size: 11px !important;
-}
-
-.browse-content {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 120px);
-}
-
-.table-container {
-  flex-grow: 1;
-  overflow: hidden;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-}
-
-/* --- 2. KONSISTENSI BIRU (PRIMARY) --- */
-
-/* Header Tabel */
-.colored-header :deep(thead th) {
-  background-color: #1976d2 !important;
-  color: white !important;
-  font-weight: bold !important;
-  text-transform: uppercase;
-  height: 36px !important;
-}
-
-/* Checkbox Header Putih */
-.colored-header :deep(thead .v-checkbox-btn .v-selection-control__wrapper) {
-  color: white !important;
-}
-
-/* Highlight Baris Dipilih */
-.desktop-table :deep(tr.v-data-table__selected) {
-  background-color: #e3f2fd !important;
-}
-
-/* Hover Effect */
-.desktop-table :deep(tbody tr:hover) {
-  cursor: pointer;
-  background-color: #f5f5f5 !important;
-}
-
-/* Zebra Striping */
-.zebra-table :deep(tbody tr:nth-of-type(odd)) {
-  background-color: #fcfcfc !important;
-}
-
-/* Warna Error untuk User Pasif (Override Row Props) */
-:deep(.text-red-darken-2),
-:deep(.text-red-darken-2 td) {
+:deep(.text-error),
+:deep(.text-error td) {
   color: #d32f2f !important;
 }
 </style>

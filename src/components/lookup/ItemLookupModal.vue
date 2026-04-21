@@ -1,219 +1,267 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
-import type { VDataTableServer } from 'vuetify/components';
-import api from '@/services/api';
-import { useToast } from 'vue-toastification';
-import type { AxiosError } from 'axios';
+import { ref, watch, computed } from "vue";
+import api from "@/services/api";
+import { useToast } from "vue-toastification";
+import type { AxiosError } from "axios";
 
 const toast = useToast();
 
-// Interface disederhanakan untuk franchise (Kode & Nama)
 interface LookupItem {
   kode: string;
   nama: string;
-  barcode?: string;
-  ukuran?: string;
-  stok?: number | null;
-  hpp?: number | null;
-  harga?: number | null; // Untuk cetak barcode
+  barcode: string;
+  ukuran: string;
+  stok: number;
+  harga: number;
 }
 
-type TableHeader = {
-  title: string
-  key: string
-  width?: string
-  minWidth?: string
-  align?: 'start' | 'center' | 'end'
-}
-
-// Props & Emits
-// modelValue untuk kontrol v-dialog
-// source tidak perlu serumit retail
 const props = defineProps<{
   modelValue: boolean;
-  source: 'cetak-barcode' | 'koreksi-stok' | 'kasir'; // Tambahkan 'kasir'
+  // TAMBAHAN: Tambahkan 'minta-barang' ke dalam daftar source
+  source:
+    | "cetak-barcode"
+    | "koreksi-stok"
+    | "kasir"
+    | "barcode"
+    | "minta-barang";
   tanggal?: string;
 }>();
-const emit = defineEmits(['update:modelValue', 'item-selected']);
+
+const emit = defineEmits(["update:modelValue", "item-selected"]);
 
 // State Modal
 const items = ref<LookupItem[]>([]);
-const loading = ref(true);
-const search = ref('');
-// State untuk VDataTableServer
-const options = ref({ page: 1, itemsPerPage: 15 }); // Default itemsPerPage
-const totalItems = ref(0); // Total item dari server
+const loading = ref(false);
+const search = ref("");
+const options = ref({ page: 1, itemsPerPage: 15 });
+const totalItems = ref(0);
 
+// Endpoint dinamis berdasarkan asal panggil
 const apiUrl = computed(() => {
-  if (props.source === 'koreksi-stok') {
-    return '/koreksi-stok/lookup/f1';
-  }
-  return '/barcodes/lookup/barang'; // Default 'cetak-barcode'
+  if (props.source === "koreksi-stok") return "/koreksi-stok/lookup/f1";
+  // TAMBAHAN: Rute khusus untuk minta barang dari server Pusat
+  if (props.source === "minta-barang")
+    return "/minta-barang-kaosan/lookup/barang";
+
+  // Default
+  return "/barcodes/lookup/barang";
 });
 
-// Header Modal
-const headers = computed<TableHeader[]>(() => {
-  // Header untuk Kasir dan Koreksi Stok hampir sama (menampilkan stok/harga)
-  if (props.source === 'kasir' || props.source === 'koreksi-stok') {
+// Header dinamis
+const headers = computed(() => {
+  const base = [
+    { title: "KODE", key: "kode", width: "120px" },
+    { title: "BARCODE", key: "barcode", width: "130px" },
+    { title: "NAMA BARANG", key: "nama", minWidth: "200px" },
+    { title: "SIZE", key: "ukuran", width: "80px", align: "center" as const },
+  ];
+
+  // Kasir & Koreksi butuh info finansial & stok
+  if (props.source === "kasir" || props.source === "koreksi-stok") {
     return [
-      { title: 'Kode', key: 'kode', width: '120px' },
-      { title: 'Barcode', key: 'barcode', width: '120px' },
-      { title: 'Nama Barang', key: 'nama', minWidth: '200px' },
-      { title: 'Ukuran', key: 'ukuran', width: '80px', align: 'center' },
-      { title: 'Harga', key: 'harga', width: '110px', align: 'end' },
-      { title: 'Stok', key: 'stok', width: '80px', align: 'end' },
+      ...base,
+      { title: "HARGA", key: "harga", width: "110px", align: "end" as const },
+      { title: "STOK", key: "stok", width: "90px", align: "end" as const },
     ];
   }
 
-  // Default untuk cetak-barcode
-  return [
-    { title: 'Kode', key: 'kode', width: '150px' },
-    { title: 'Nama Barang', key: 'nama' },
-  ];
+  // Untuk minta-barang & barcode, cukup return 'base' saja
+  return base;
 });
 
-// Format harga
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '-';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
-};
-const formatNumber = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '0';
-  return new Intl.NumberFormat('id-ID').format(value);
-};
-
-// Methods
-const loadItems = async ({ page, itemsPerPage }: typeof options.value & { sortBy?: any } = options.value) => {
+const loadItems = async () => {
+  if (!props.modelValue) return;
   loading.value = true;
   try {
-    const params: Record<string, any> = {
-      term: search.value,
-      page: page,
-      itemsPerPage: itemsPerPage,
-    };
+    const response = await api.get(apiUrl.value, {
+      params: {
+        term: search.value,
+        keyword: search.value, // Kita kirim dua-duanya agar backend mana pun tetap jalan
+        page: options.value.page,
+        itemsPerPage: options.value.itemsPerPage,
+        tanggal: props.tanggal,
+      },
+    });
 
-    if (props.source === 'koreksi-stok') {
-      if (!props.tanggal) {
-        toast.error("Tanggal (dari form) diperlukan untuk F1 Koreksi Stok.");
-        loading.value = false;
-        return;
-      }
-      params.tanggal = props.tanggal;
+    // PERBAIKAN: Handle perbedaan struktur respons API
+    // (Ada API yang melempar array langsung, ada yang melempar objek { items, total })
+    if (Array.isArray(response.data)) {
+      items.value = response.data;
+      totalItems.value = response.data.length;
+    } else {
+      items.value = response.data.items || [];
+      totalItems.value = response.data.total || 0;
     }
-
-    const response = await api.get<{ items: LookupItem[], total: number }>(apiUrl.value, { params });
-    items.value = response.data.items;
-    totalItems.value = response.data.total;
   } catch (err) {
     const error = err as AxiosError<{ message?: string }>;
-    toast.error(error.response?.data?.message || 'Gagal memuat data barang.');
-    items.value = []; // Kosongkan jika error
-    totalItems.value = 0;
+    toast.error(error.response?.data?.message || "Gagal memuat data barang.");
   } finally {
     loading.value = false;
   }
 };
 
-// Fungsi saat baris di modal diklik
-const selectItem = (item: LookupItem) => {
-  emit('item-selected', item); // Kirim data item yang dipilih
-  emit('update:modelValue', false); // Tutup modal
+// Fungsi handler klik baris
+const handleRowClick = (event: any, { item }: any) => {
+  selectItem(item);
 };
 
-// Debounce search
-let searchTimeout: ReturnType<typeof setTimeout>;
+const selectItem = (item: any) => {
+  emit("item-selected", item);
+  emit("update:modelValue", false);
+};
+
+// Search dengan debounce
+let timer: any;
 watch(search, () => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    options.value.page = 1; // Reset ke halaman 1 saat search
-    loadItems(options.value); // Panggil load items
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    options.value.page = 1;
+    loadItems();
   }, 500);
 });
 
-// Load data saat modal pertama kali dibuka
-watch(() => props.modelValue, (newValue) => {
-  if (newValue) {
-    search.value = '';
-    items.value = [];
-    loading.value = true; // Set loading true lagi
-    loadItems(); // <-- PANGGIL KEMBALI loadItems
-  }
-});
+watch(
+  () => props.modelValue,
+  (val) => {
+    if (val) {
+      search.value = "";
+      options.value.page = 1;
+      loadItems();
+    }
+  },
+);
 
-// Load data awal saat komponen mounted (opsional, tergantung behavior yg diinginkan)
-// onMounted(() => {
-//   loadItems();
-// });
-
+const formatCurrency = (v: any) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(v || 0);
+const formatNumber = (v: any) => new Intl.NumberFormat("id-ID").format(v || 0);
 </script>
 
 <template>
-  <v-dialog :model-value="modelValue" @update:modelValue="$emit('update:modelValue', $event)" max-width="800px"
-    persistent scrollable>
-    <v-card class="dialog-card d-flex flex-column" style="height: 70vh;">
+  <v-dialog
+    :model-value="modelValue"
+    @update:model-value="emit('update:modelValue', $event)"
+    max-width="900px"
+    persistent
+    scrollable
+  >
+    <v-card class="dialog-lookup rounded-lg">
       <v-toolbar color="primary" density="compact">
-        <v-toolbar-title class="text-subtitle-1">Bantuan - Cari Barang</v-toolbar-title>
+        <v-icon class="ml-4 mr-2">mdi-magnify</v-icon>
+        <span class="text-subtitle-2 font-weight-bold"
+          >Bantuan - Cari Data Barang</span
+        >
         <v-spacer></v-spacer>
-        <v-btn icon="mdi-close" @click="$emit('update:modelValue', false)" variant="text" size="small"></v-btn>
+        <v-btn
+          icon="mdi-close"
+          variant="text"
+          size="small"
+          @click="emit('update:modelValue', false)"
+        ></v-btn>
       </v-toolbar>
 
-      <v-card-text class="pa-4 d-flex flex-column flex-grow-1">
-        <v-text-field v-model="search" label="Cari berdasarkan kode, nama, atau barcode..." class="mb-4 flex-shrink-0"
-          variant="outlined" density="comfortable" clearable hide-details autofocus
-          @keyup.enter="options.page = 1; loadItems()"></v-text-field>
+      <v-card-text class="pa-4 bg-grey-lighten-4">
+        <v-text-field
+          v-model="search"
+          label="Ketik Kode, Nama, atau Scan Barcode..."
+          variant="outlined"
+          density="compact"
+          bg-color="white"
+          prepend-inner-icon="mdi-magnify"
+          hide-details
+          autofocus
+          class="mb-4"
+          @keyup.enter="loadItems"
+        ></v-text-field>
 
-        <v-data-table-server v-model:page="options.page" v-model:items-per-page="options.itemsPerPage"
-          :headers="headers" :items="items" :items-length="totalItems" :loading="loading" item-value="kode" hover
-          density="compact" fixed-header class="desktop-table flex-grow-1" no-data-text="Tidak ada barang ditemukan."
-          @update:options="loadItems">
-          <!-- Render baris secara dinamis -->
-          <template #item="{ item }">
-            <tr style="cursor: pointer;" @click="selectItem(item)">
-              <td>{{ item.kode }}</td>
-              <td>{{ item.barcode }}</td>
-              <td>{{ item.nama }}</td>
-              <td class="text-center">{{ item.ukuran }}</td>
+        <div class="table-border rounded-lg overflow-hidden border">
+          <v-data-table-server
+            v-model:page="options.page"
+            v-model:items-per-page="options.itemsPerPage"
+            :headers="headers"
+            :items="items"
+            :items-length="totalItems"
+            :loading="loading"
+            density="compact"
+            fixed-header
+            height="450px"
+            hover
+            class="lookup-table colored-header"
+            @update:options="loadItems"
+            @click:row="handleRowClick"
+          >
+            <template #[`item.kode`]="{ item }">
+              <span class="font-weight-bold text-blue-darken-2">{{
+                item.kode
+              }}</span>
+            </template>
 
-              <template v-if="props.source !== 'cetak-barcode'">
-                <td class="text-end text-primary font-weight-bold">{{ formatCurrency(item.harga) }}</td>
-                <td class="text-end" :class="item.stok <= 0 ? 'text-error' : ''">{{ formatNumber(item.stok) }}</td>
-              </template>
-            </tr>
-          </template>
+            <template #[`item.harga`]="{ value }">
+              <span class="font-weight-black text-primary">{{
+                formatCurrency(value)
+              }}</span>
+            </template>
 
-          <template v-slot:loading>
-            <v-skeleton-loader type="table-row@5"></v-skeleton-loader>
-          </template>
-        </v-data-table-server>
+            <template #[`item.stok`]="{ value }">
+              <v-chip
+                :color="value <= 0 ? 'error' : 'success'"
+                size="x-small"
+                variant="flat"
+                class="font-weight-bold"
+              >
+                {{ formatNumber(value) }}
+              </v-chip>
+            </template>
 
+            <template v-slot:loading>
+              <v-skeleton-loader type="table-row@10"></v-skeleton-loader>
+            </template>
+          </v-data-table-server>
+        </div>
       </v-card-text>
+
       <v-divider></v-divider>
-      <v-card-actions class="dialog-footer">
+      <v-card-actions class="pa-3 bg-white">
+        <span class="text-caption text-grey ml-2 italic"
+          >* Klik pada baris data atau tekan Enter untuk memilih</span
+        >
         <v-spacer></v-spacer>
-        <v-btn size="small" variant="text" @click="$emit('update:modelValue', false)">Tutup</v-btn>
+        <v-btn
+          variant="tonal"
+          color="grey-darken-3"
+          size="small"
+          @click="emit('update:modelValue', false)"
+          >Tutup</v-btn
+        >
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
 <style scoped>
-/* Style standar dialog */
-.dialog-card {
-  font-size: 12px;
+.dialog-lookup :deep(*) {
+  font-size: 11px !important;
+}
+.colored-header :deep(thead th) {
+  background-color: #1976d2 !important;
+  color: white !important;
+  font-weight: bold !important;
+}
+.lookup-table :deep(tbody tr:hover) {
+  background-color: #e3f2fd !important;
+  cursor: pointer;
+}
+.table-border {
+  border: 1px solid #e0e0e0;
 }
 
-.dialog-footer {
-  border-top: 1px solid #e0e0e0;
-  padding: 8px 16px;
-  background-color: #f5f5f5;
+.lookup-table :deep(tbody tr) {
+  cursor: pointer !important;
 }
-
-.desktop-table {
-  height: 100%;
-}
-
-.desktop-table :deep(.v-table__wrapper) {
-  height: 100%;
-  overflow-y: auto;
+.lookup-table :deep(tbody tr:hover) {
+  background-color: #e3f2fd !important;
 }
 </style>

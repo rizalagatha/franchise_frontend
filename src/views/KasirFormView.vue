@@ -1,56 +1,46 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { useRouter } from "vue-router";
 import api from "@/services/api";
-import PageLayout from "@/components/PageLayout.vue";
+import { useToast } from "vue-toastification";
+import { format } from "date-fns";
+import { formatRupiah } from "@/utils/formatRupiah";
+
+// Components & Composables
+import BaseForm from "@/components/BaseForm.vue";
 import CustomerSearchModal from "@/components/lookup/CustomerSearchModal.vue";
 import BankSearchModal from "@/components/lookup/BankSearchModal.vue";
 import ItemLookupModal from "@/components/lookup/ItemLookupModal.vue";
 import PaymentModal from "@/components/PaymentModal.vue";
 import KasirPrintPreviewModal from "@/components/KasirPrintPreviewModal.vue";
-import { useToast } from "vue-toastification";
-import { useAuthStore } from "@/stores/authStore";
-import { format } from "date-fns";
-import type { AxiosError } from "axios";
+import { useForm } from "@/composables/useForm";
 
-// Store & composables
 const router = useRouter();
-const route = useRoute();
 const toast = useToast();
-const authStore = useAuthStore();
-const MENU_ID = "31"; // Menu Kasir
+const MENU_ID = "31";
 
-interface InvoiceItem {
-  id: number;
-  kode: string;
-  barcode: string;
-  nama: string;
-  ukuran: string;
-  stok: number;
-  jumlah: number | null;
-  harga: number | null;
-  hpp: number;
-  diskon: number | null;
-  total: number;
-}
+// 1. Setup Composable dengan Rute Pulang
+const {
+  isEditMode,
+  isSaving,
+  isLoading,
+  showSaveDialog,
+  showCancelDialog,
+  showCloseDialog,
+  executeClose,
+  goBack,
+} = useForm({
+  menuId: MENU_ID,
+  initialData: {},
+  onSuccessRoute: "/transaksi/kasir",
+  submitApi: async () => {}, // Dikosongkan karena kita pakai custom executeSave
+});
 
-type TableHeader = {
-  title: string;
-  key: string;
-  width?: string;
-  align?: "start" | "center" | "end";
-  sortable?: boolean;
-};
-
-const isEditMode = computed(() => !!route.params.nomor);
 const pageTitle = computed(() =>
   isEditMode.value ? "Ubah Invoice" : "Kasir Baru / Input Invoice",
 );
-const requiredPermission = computed(() =>
-  isEditMode.value ? "edit" : "insert",
-);
 
-// State Header Form
+// 2. State Form Header
 const formHeader = ref({
   nomor: "",
   tanggal: format(new Date(), "yyyy-MM-dd"),
@@ -67,120 +57,75 @@ const formHeader = ref({
   keterangan: "",
 });
 
-// State Pendukung
-const items = ref<InvoiceItem[]>([]);
-const customers = ref<any[]>([]);
-const banks = ref<any[]>([]);
+// 3. State Grid Detail & Pendukung
+const items = ref<any[]>([]);
 const nextItemId = ref(1);
-const isLoading = ref(true);
-const isSaving = ref(false);
-const isLookupLoading = ref(false);
 const scanBarcode = ref("");
+const isLookupLoading = ref(false);
+
+// State Modal Lookup
 const showCustomerModal = ref(false);
 const showBankModal = ref(false);
 const isItemLookupVisible = ref(false);
-const isConfirmDialogVisible = ref(false);
-const confirmText = ref("Yakin ingin menyimpan data invoice ini?");
+
+// State Modal Transaksi
 const showPaymentModal = ref(false);
 const showPrintModal = ref(false);
 const savedInvoiceNomor = ref("");
-const confirmTitle = ref("Konfirmasi");
-const isConfirmOnly = ref(false); // Jika true, hanya muncul tombol OK (mode warning)
 
-// Header Tabel Detail
-const tableHeaders: TableHeader[] = [
+// State Modal Konfirmasi Khusus Kasir
+const isConfirmDialogVisible = ref(false);
+const confirmTitle = ref("Konfirmasi");
+const confirmText = ref("Yakin ingin memproses transaksi ini?");
+
+// Header Tabel Grid
+const tableHeaders = [
   { title: "#", key: "no", sortable: false, width: "40px" },
-  { title: "Barcode", key: "barcode", width: "130px" },
-  { title: "Nama Barang", key: "nama", width: "300px" },
-  { title: "Size", key: "ukuran", align: "center", width: "80px" },
-  { title: "Stok", key: "stok", align: "end", width: "80px" },
-  { title: "Qty", key: "jumlah", align: "end", width: "100px" },
-  { title: "Harga", key: "harga", align: "end", width: "120px" },
-  { title: "Disc", key: "diskon", align: "end", width: "100px" },
-  { title: "Total", key: "total", align: "end", width: "130px" },
+  { title: "BARCODE", key: "barcode", width: "130px" },
+  { title: "NAMA BARANG", key: "nama", minWidth: "250px" },
+  { title: "SIZE", key: "ukuran", align: "center" as const, width: "80px" },
+  { title: "STOK", key: "stok", align: "end" as const, width: "80px" },
+  { title: "QTY", key: "jumlah", align: "end" as const, width: "90px" },
+  { title: "HARGA", key: "harga", align: "end" as const, width: "120px" },
+  { title: "DISC", key: "diskon", align: "end" as const, width: "100px" },
+  { title: "TOTAL", key: "total", align: "end" as const, width: "130px" },
   {
-    title: "",
+    title: "AKSI",
     key: "actions",
     sortable: false,
     width: "50px",
-    align: "center",
+    align: "center" as const,
   },
 ];
 
-// Perhitungan Totals
-const subTotal = computed(() => {
-  return items.value.reduce((acc, item) => acc + (item.total || 0), 0);
-});
-
-const grandTotal = computed(() => {
-  return (
-    subTotal.value -
-    (formHeader.value.diskonGlobal || 0) +
-    (formHeader.value.biayaKirim || 0)
-  );
-});
-
-const sisaPiutang = computed(() => {
-  const bayar =
-    (formHeader.value.rpTunai || 0) + (formHeader.value.rpCard || 0);
-  const sisa = grandTotal.value - bayar;
-  return sisa > 0 ? sisa : 0;
-});
-
-const kembalian = computed(() => {
-  const bayar =
-    (formHeader.value.rpTunai || 0) + (formHeader.value.rpCard || 0);
-  const sisa = bayar - grandTotal.value;
-  return sisa > 0 ? sisa : 0;
-});
-
-const calculateItemTotal = (item: InvoiceItem) => {
-  const qty = item.jumlah || 0;
-  const harga = item.harga || 0;
-  const disc = item.diskon || 0;
-  item.total = qty * (harga - disc);
-};
-
-watch(
-  items,
-  () => {
-    items.value.forEach(calculateItemTotal);
-  },
-  { deep: true },
+// --- 4. Logic Perhitungan dengan Math.round() ---
+const subTotal = computed(() =>
+  items.value.reduce((acc, item) => acc + (item.total || 0), 0),
 );
 
-// Formatters
-const formatCurrency = (v: number) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(v);
+const grandTotal = computed(() =>
+  Math.round(
+    subTotal.value -
+      (formHeader.value.diskonGlobal || 0) +
+      (formHeader.value.biayaKirim || 0),
+  ),
+);
 
+const calculateItemTotal = (item: any) => {
+  item.total = Math.round(
+    (item.jumlah || 0) * ((item.harga || 0) - (item.diskon || 0)),
+  );
+};
+
+watch(items, () => items.value.forEach(calculateItemTotal), { deep: true });
+
+// --- 5. Lookup & Scan Logic ---
 const handleGlobalKeyDown = (event: KeyboardEvent) => {
   if (event.key === "F1") {
     event.preventDefault();
-
-    // Tambahkan validasi customer di sini
-    if (!formHeader.value.kdCus) {
+    if (!formHeader.value.kdCus)
       return toast.warning("Pilih customer dulu sebelum mencari barang.");
-    }
-
     isItemLookupVisible.value = true;
-  }
-};
-
-// Methods
-const fetchInitialData = async () => {
-  try {
-    const [custRes, bankRes] = await Promise.all([
-      api.get("/customers"),
-      api.get("/rekening"),
-    ]);
-    customers.value = custRes.data;
-    banks.value = bankRes.data;
-  } catch (error) {
-    toast.error("Gagal memuat data pendukung.");
   }
 };
 
@@ -191,6 +136,7 @@ const onScanBarcode = async () => {
     scanBarcode.value = "";
     return;
   }
+
   const barcode = scanBarcode.value.trim();
   isLookupLoading.value = true;
 
@@ -202,7 +148,7 @@ const onScanBarcode = async () => {
       return;
     }
 
-    const response = await api.get(`/pembelian/lookup/barcode/${barcode}`); // Gunakan lookup barcode yang sudah ada
+    const response = await api.get(`/pembelian/lookup/barcode/${barcode}`);
     const res = response.data;
 
     items.value.unshift({
@@ -226,14 +172,10 @@ const onScanBarcode = async () => {
   }
 };
 
-// --- Handler saat item dipilih dari modal F1 ---
 const onItemSelected = (selectedItem: any) => {
-  // Samakan property dari modal (kode, nama, barcode, hpp, harga)
-  // ke structure items kasir
   const existing = items.value.find(
     (i) => i.barcode === selectedItem.barcode || i.kode === selectedItem.kode,
   );
-
   if (existing) {
     existing.jumlah = (existing.jumlah ?? 0) + 1;
     toast.info(`Jumlah ${selectedItem.nama} ditambah.`);
@@ -246,7 +188,7 @@ const onItemSelected = (selectedItem: any) => {
       ukuran: selectedItem.ukuran || "",
       stok: selectedItem.stok || 0,
       jumlah: 1,
-      harga: selectedItem.harga || selectedItem.hpp || 0, // Fallback ke HPP jika harga jual null
+      harga: selectedItem.harga || selectedItem.hpp || 0,
       hpp: selectedItem.hpp || 0,
       diskon: 0,
       total: selectedItem.harga || selectedItem.hpp || 0,
@@ -255,47 +197,66 @@ const onItemSelected = (selectedItem: any) => {
   }
 };
 
-const removeItem = (id: number) => {
-  items.value = items.value.filter((i) => i.id !== id);
+// --- 6. Save & Payment Logic ---
+const openPayment = () => {
+  if (items.value.length === 0) return toast.error("Barang masih kosong!");
+  if (!formHeader.value.kdCus) return toast.error("Pilih customer dulu!");
+
+  const overStockItem = items.value.find(
+    (item) => (item.jumlah || 0) > item.stok,
+  );
+  if (overStockItem)
+    return toast.error(
+      `Stok tidak cukup untuk: ${overStockItem.nama} (${overStockItem.ukuran}). Sisa stok: ${overStockItem.stok}`,
+    );
+
+  showPaymentModal.value = true;
 };
 
-const save = () => {
-  if (items.value.length === 0) return toast.error("Detail barang kosong.");
-  if (!formHeader.value.kdCus) return toast.error("Customer harus dipilih.");
+const handleFinalSave = async (paymentData: any) => {
+  const gtot = grandTotal.value;
+  const bayar = (paymentData.rpTunai || 0) + (paymentData.rpCard || 0);
 
-  // Validasi pembayaran
-  if (formHeader.value.rpTunai === 0 && formHeader.value.rpCard === 0) {
-    toast.warning(
-      "Pembayaran masih kosong. Akan tercatat sebagai Piutang Penuh.",
-    );
+  formHeader.value.rpTunai = paymentData.rpTunai;
+  formHeader.value.rpCard = paymentData.rpCard;
+  formHeader.value.noRek = paymentData.noRek;
+  formHeader.value.pundiAmal = paymentData.pundiAmal;
+  formHeader.value.kembalian = paymentData.kembalian;
+
+  if (
+    paymentData.rpCard !== 0 &&
+    (!paymentData.noRek || paymentData.noRek.trim() === "")
+  ) {
+    return toast.warning("No. Rekening harus diisi untuk pembayaran kartu.");
+  }
+
+  if (bayar !== 0 && bayar < gtot) {
+    confirmTitle.value = "Konfirmasi Pembayaran";
+    confirmText.value = `Total bayar kurang ${formatRupiah(gtot - bayar)}. Akan tetap disimpan?`;
+  } else {
+    confirmTitle.value = "Konfirmasi Simpan";
+    confirmText.value = "Yakin ingin memproses transaksi ini?";
   }
 
   isConfirmDialogVisible.value = true;
 };
 
-// Eksekusi simpan yang sebenarnya
 const executeSave = async () => {
   isSaving.value = true;
   try {
     const payload = {
       header: formHeader.value,
-      // Kirim item yang qty-nya > 0 saja
       items: items.value.filter((item) => (item.jumlah || 0) > 0),
       isNew: !isEditMode.value,
     };
-
-    // Eksekusi API Simpan
     const response = await api.post("/kasir/save", payload);
 
-    // Simpan nomor invoice yang baru saja di-generate untuk keperluan cetak
     savedInvoiceNomor.value = response.data.nomor;
     toast.success(response.data.message || "Invoice berhasil disimpan.");
 
-    // Tutup dialog konfirmasi dan modal pembayaran
     isConfirmDialogVisible.value = false;
     showPaymentModal.value = false;
 
-    // Transisi: Tunggu render DOM selesai lalu buka modal print
     await nextTick();
     showPrintModal.value = true;
   } catch (error: any) {
@@ -305,197 +266,150 @@ const executeSave = async () => {
   }
 };
 
-const onCustomerSelected = (customer: any) => {
-  // customer berisi properti dengan huruf kapital sesuai alias SQL
-  formHeader.value.kdCus = customer.Kode;
-  formHeader.value.namaCus = customer.Nama; // Tampilkan nama di text-field
-};
-
-const onBankSelected = (bank: any) => {
-  // Pastikan mengambil properti yang benar dari objek
-  formHeader.value.noRek = bank.NoRekening;
-  formHeader.value.namaBank = bank.NamaBank; // String, bukan Object
-};
-
-const openPayment = () => {
-  if (items.value.length === 0) return toast.error("Barang masih kosong!");
-  if (!formHeader.value.kdCus) return toast.error("Pilih customer dulu!");
-
-  // --- VALIDASI STOK (DELPHI LOGIC) ---
-  const overStockItem = items.value.find(
-    (item) => (item.jumlah || 0) > item.stok,
-  );
-  if (overStockItem) {
-    return toast.error(
-      `Stok tidak cukup untuk: ${overStockItem.nama} (${overStockItem.ukuran}). Sisa stok: ${overStockItem.stok}`,
-    );
-  }
-  // ------------------------------------
-
-  showPaymentModal.value = true;
-};
-
-const handleFinalSave = async (paymentData: any) => {
-  // 1. Ambil variabel untuk validasi
-  const gtot = grandTotal.value;
-  const bayar = (paymentData.rpTunai || 0) + (paymentData.rpCard || 0);
-  const rpCard = paymentData.rpCard || 0;
-  const noRek = paymentData.noRek || "";
-
-  // 2. Mapping data ke state formHeader agar siap saat executeSave dipanggil
-  formHeader.value.rpTunai = paymentData.rpTunai;
-  formHeader.value.rpCard = paymentData.rpCard;
-  formHeader.value.noRek = paymentData.noRek;
-
-  formHeader.value.pundiAmal = paymentData.pundiAmal; // Nilai receh (misal: 500)
-  formHeader.value.kembalian = paymentData.kembalian; // Nilai netto kembali (misal: 5.000)
-
-  // 3. Validasi No. Rekening (Mode Peringatan/mtWarning)
-  if (rpCard !== 0 && (!noRek || noRek.trim() === "")) {
-    confirmTitle.value = "Peringatan";
-    confirmText.value = "No. Rekening harus diisi.";
-    isConfirmOnly.value = true; // Hanya tombol OK yang muncul
-    isConfirmDialogVisible.value = true;
-    return;
-  }
-
-  // 4. Logika Konfirmasi Simpan (Mode Konfirmasi/MessageDlg)
-  isConfirmOnly.value = false; // Muncul tombol Ya/Tidak
-
-  if (bayar !== 0 && bayar < gtot) {
-    // Jika bayar kurang dari total
-    confirmTitle.value = "Konfirmasi Pembayaran";
-    confirmText.value = "Total bayar kurang. Akan tetap disimpan?";
-  } else {
-    // Jika bayar cukup atau pas
-    confirmTitle.value = "Konfirmasi Simpan";
-    confirmText.value = "Akan disimpan?";
-  }
-
-  isConfirmDialogVisible.value = true;
+const handleConfirmCancel = () => {
+  showCancelDialog.value = false;
+  formHeader.value = {
+    nomor: "",
+    tanggal: format(new Date(), "yyyy-MM-dd"),
+    kdCus: "",
+    namaCus: "",
+    diskonGlobal: 0,
+    biayaKirim: 0,
+    rpTunai: 0,
+    rpCard: 0,
+    noRek: "",
+    namaBank: "",
+    pundiAmal: 0,
+    kembalian: 0,
+    keterangan: "",
+  };
+  items.value = [];
+  toast.info("Inputan di-reset.");
 };
 
 const onPrintModalClosed = () => {
   showPrintModal.value = false;
-  router.push("/transaksi/kasir"); // Kembali ke browse setelah selesai cetak
+  goBack();
 };
 
-onMounted(async () => {
+// --- 7. Lifecycle ---
+onMounted(() => {
   window.addEventListener("keydown", handleGlobalKeyDown);
-  await fetchInitialData();
-  if (isEditMode.value) {
-    // Logic load data edit di sini
-  } else {
-    isLoading.value = false;
-  }
+  isLoading.value = false; // Karena kasir biasa form baru
 });
-
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleGlobalKeyDown);
-});
+onUnmounted(() => window.removeEventListener("keydown", handleGlobalKeyDown));
 </script>
 
 <template>
-  <PageLayout
-    title="Kasir Baru / Input Invoice"
-    desktop-mode
+  <BaseForm
+    :title="pageTitle"
+    menu-id="31"
     icon="mdi-cash-register"
+    :is-loading="isLoading"
+    :is-saving="isSaving"
+    v-model:show-save-dialog="showSaveDialog"
+    v-model:show-cancel-dialog="showCancelDialog"
+    v-model:show-close-dialog="showCloseDialog"
+    @validate-save="openPayment"
+    @confirm-cancel="handleConfirmCancel"
+    @confirm-close="executeClose"
   >
-    <template #header-actions>
-      <div class="text-caption text-grey mr-4 d-flex align-center">
-        <v-kbd>F1</v-kbd> <span class="ml-1">Cari Barang</span>
+    <template #left-column>
+      <div class="desktop-form-section header-section border-l-primary mb-3">
+        <v-text-field
+          label="No. Invoice"
+          v-model="formHeader.nomor"
+          readonly
+          variant="filled"
+          density="compact"
+          hide-details
+          class="mb-2"
+          placeholder="<Otomatis>"
+        />
+        <v-text-field
+          label="Tanggal"
+          v-model="formHeader.tanggal"
+          type="date"
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="mb-2 bg-white"
+        />
+        <v-text-field
+          label="Customer *"
+          v-model="formHeader.namaCus"
+          readonly
+          variant="outlined"
+          density="compact"
+          hide-details
+          prepend-inner-icon="mdi-account"
+          append-inner-icon="mdi-magnify"
+          @click="showCustomerModal = true"
+          class="cursor-pointer bg-white"
+          placeholder="Pilih Customer"
+        />
       </div>
-      <v-btn
-        color="primary"
-        @click="openPayment"
-        prepend-icon="mdi-cash-multiple"
-        >Bayar & Simpan</v-btn
-      >
-      <v-btn variant="outlined" @click="router.back()">Tutup</v-btn>
-    </template>
 
-    <div class="kasir-wrapper">
-      <aside class="left-panel">
-        <div class="desktop-form-section header-section mb-3">
+      <div
+        class="desktop-form-section bg-grey-lighten-4 pa-4 rounded-lg border"
+      >
+        <div
+          class="d-flex justify-space-between align-center mb-2 font-weight-bold text-grey-darken-2"
+        >
+          <span>Subtotal</span> <span>{{ formatRupiah(subTotal) }}</span>
+        </div>
+        <div
+          class="d-flex justify-space-between align-center mb-2 font-weight-bold text-grey-darken-2"
+        >
+          <span>Diskon Global</span>
           <v-text-field
-            v-model="formHeader.nomor"
-            label="Nomor Invoice"
-            readonly
+            v-model.number="formHeader.diskonGlobal"
+            type="number"
             density="compact"
             hide-details
-            variant="filled"
-            class="mb-2"
-          />
-          <v-text-field
-            v-model="formHeader.tanggal"
-            label="Tanggal"
-            type="date"
-            density="compact"
-            hide-details
-            variant="outlined"
-            class="mb-2"
-          />
-          <v-text-field
-            v-model="formHeader.namaCus"
-            label="Customer"
-            readonly
-            density="compact"
-            hide-details
-            variant="outlined"
-            prepend-inner-icon="mdi-account"
-            append-inner-icon="mdi-magnify"
-            @click="showCustomerModal = true"
-            class="clickable-input"
+            variant="underlined"
+            class="small-input text-right-input text-primary"
+            @focus="$event.target.select()"
           />
         </div>
-
-        <v-card
-          color="grey-lighten-4"
-          class="rounded-lg pa-4 border shadow-none"
+        <div
+          class="d-flex justify-space-between align-center mb-3 font-weight-bold text-grey-darken-2"
         >
-          <div class="summary-line">
-            <span>Subtotal</span> <span>{{ formatCurrency(subTotal) }}</span>
-          </div>
-          <div class="summary-line">
-            <span>Diskon</span>
-            <v-text-field
-              v-model.number="formHeader.diskonGlobal"
-              type="number"
-              density="compact"
-              hide-details
-              variant="underlined"
-              class="small-input"
-            />
-          </div>
-          <div class="summary-line mb-3">
-            <span>Biaya Kirim</span>
-            <v-text-field
-              v-model.number="formHeader.biayaKirim"
-              type="number"
-              density="compact"
-              hide-details
-              variant="underlined"
-              class="small-input"
-            />
-          </div>
-          <v-divider class="my-2"></v-divider>
-          <div
-            class="d-flex justify-space-between text-h5 font-weight-black text-primary total-text"
-          >
-            <span>TOTAL</span> <span>{{ formatCurrency(grandTotal) }}</span>
-          </div>
-        </v-card>
-      </aside>
+          <span>Biaya Kirim</span>
+          <v-text-field
+            v-model.number="formHeader.biayaKirim"
+            type="number"
+            density="compact"
+            hide-details
+            variant="underlined"
+            class="small-input text-right-input text-primary"
+            @focus="$event.target.select()"
+          />
+        </div>
+        <v-divider class="my-2 border-opacity-50"></v-divider>
+        <div
+          class="d-flex justify-space-between align-center text-h6 font-weight-black text-primary mt-2"
+        >
+          <span>TOTAL</span> <span>{{ formatRupiah(grandTotal) }}</span>
+        </div>
+      </div>
+    </template>
 
-      <main class="main-panel">
-        <v-card
-          variant="outlined"
-          class="mb-3 rounded-lg border-primary border-opacity-50 bg-blue-lighten-5"
+    <template #right-column>
+      <div class="d-flex flex-column fill-height">
+        <div
+          class="desktop-form-section mb-3 pa-2 bg-blue-lighten-5 border-primary border-opacity-50"
         >
           <div class="d-flex align-center">
+            <div class="mr-3 ml-2 d-flex align-center">
+              <v-kbd
+                class="bg-white text-primary border px-2 py-1 rounded font-weight-bold shadow-sm"
+                >F1</v-kbd
+              >
+            </div>
             <v-text-field
               v-model="scanBarcode"
-              placeholder="Scan barcode di sini... (F1 untuk bantuan)"
+              placeholder="Scan barcode di sini... (Atau tekan F1)"
               prepend-inner-icon="mdi-barcode-scan"
               variant="plain"
               hide-details
@@ -508,35 +422,31 @@ onUnmounted(() => {
               color="primary"
               icon="mdi-text-search"
               @click="
-                () => {
-                  if (!formHeader.value.kdCus) {
-                    toast.warning(
-                      'Pilih customer dulu sebelum mencari barang.',
-                    );
-                  } else {
-                    isItemLookupVisible = true;
-                  }
-                }
+                () =>
+                  formHeader.kdCus
+                    ? (isItemLookupVisible = true)
+                    : toast.warning('Pilih customer dulu!')
               "
             ></v-btn>
           </div>
-        </v-card>
+        </div>
 
-        <v-card
-          variant="outlined"
-          class="rounded-lg flex-grow-1 overflow-hidden"
+        <div
+          class="desktop-form-section pa-0 overflow-hidden flex-grow-1 elevation-1"
         >
           <v-data-table
             :headers="tableHeaders"
             :items="items"
             density="compact"
-            class="fill-height-table colored-header"
+            class="desktop-table colored-header zebra-table"
             fixed-header
             :items-per-page="-1"
+            hide-default-footer
           >
             <template #[`item.no`]="{ index }">{{ index + 1 }}</template>
+
             <template #[`item.stok`]="{ item }">
-              <div
+              <span
                 :class="
                   item.stok - (item.jumlah || 0) < 0
                     ? 'text-error font-weight-bold'
@@ -544,8 +454,9 @@ onUnmounted(() => {
                 "
               >
                 {{ item.stok }}
-              </div>
+              </span>
             </template>
+
             <template #[`item.jumlah`]="{ item }">
               <v-text-field
                 v-model.number="item.jumlah"
@@ -553,180 +464,150 @@ onUnmounted(() => {
                 variant="underlined"
                 density="compact"
                 hide-details
-                class="text-end"
+                class="text-right-input"
                 :color="(item.jumlah || 0) > item.stok ? 'error' : 'primary'"
+                @focus="$event.target.select()"
               />
             </template>
+
             <template #[`item.harga`]="{ value }">{{
-              formatCurrency(value)
+              formatRupiah(value)
             }}</template>
-            <template #[`item.diskon`]="{ item }"
-              ><v-text-field
+
+            <template #[`item.diskon`]="{ item }">
+              <v-text-field
                 v-model.number="item.diskon"
                 type="number"
                 variant="underlined"
                 density="compact"
                 hide-details
-                class="text-end"
-            /></template>
-            <template #[`item.total`]="{ item }"
-              ><span class="font-weight-bold">{{
-                formatCurrency(
-                  (item.jumlah ?? 0) * ((item.harga ?? 0) - (item.diskon ?? 0)),
-                )
-              }}</span></template
-            >
-            <template #[`item.actions`]="{ item }"
-              ><v-icon
+                class="text-right-input text-error"
+                @focus="$event.target.select()"
+              />
+            </template>
+
+            <template #[`item.total`]="{ value }">
+              <span class="font-weight-bold text-primary">{{
+                formatRupiah(value)
+              }}</span>
+            </template>
+
+            <template #[`item.actions`]="{ item }">
+              <v-icon
                 size="small"
                 color="error"
+                class="cursor-pointer"
                 @click="items = items.filter((i) => i.id !== item.id)"
                 >mdi-delete</v-icon
-              ></template
-            >
+              >
+            </template>
             <template #bottom></template>
           </v-data-table>
-        </v-card>
-      </main>
-    </div>
+        </div>
+      </div>
+    </template>
+  </BaseForm>
 
-    <CustomerSearchModal
-      v-model="showCustomerModal"
-      @customer-selected="onCustomerSelected"
-    />
-    <BankSearchModal v-model="showBankModal" @bank-selected="onBankSelected" />
-    <ItemLookupModal
-      v-model="isItemLookupVisible"
-      source="kasir"
-      @item-selected="onItemSelected"
-    />
-    <PaymentModal
-      v-model="showPaymentModal"
-      :total-invoice="grandTotal"
-      @confirm-payment="handleFinalSave"
-    />
-    <KasirPrintPreviewModal
-      v-model="showPrintModal"
-      :nomor-invoice="savedInvoiceNomor"
-      @update:modelValue="(val) => !val && onPrintModalClosed()"
-    />
+  <CustomerSearchModal
+    v-model="showCustomerModal"
+    @customer-selected="
+      (c) => {
+        formHeader.kdCus = c.Kode;
+        formHeader.namaCus = c.Nama;
+      }
+    "
+  />
+  <BankSearchModal
+    v-model="showBankModal"
+    @bank-selected="
+      (b) => {
+        formHeader.noRek = b.NoRekening;
+        formHeader.namaBank = b.NamaBank;
+      }
+    "
+  />
+  <ItemLookupModal
+    v-model="isItemLookupVisible"
+    source="kasir"
+    @item-selected="onItemSelected"
+  />
 
-    <v-dialog v-model="isConfirmDialogVisible" max-width="400px" persistent>
-      <v-card class="rounded-lg">
-        <v-card-title class="text-h6 font-weight-bold d-flex align-center pa-4">
-          <v-icon :color="isConfirmOnly ? 'warning' : 'primary'" class="mr-2">
-            {{ isConfirmOnly ? "mdi-alert-circle" : "mdi-help-circle" }}
-          </v-icon>
-          {{ confirmTitle }}
-        </v-card-title>
+  <PaymentModal
+    v-model="showPaymentModal"
+    :total-invoice="grandTotal"
+    @confirm-payment="handleFinalSave"
+  />
 
-        <v-card-text class="pa-4 pt-0">{{ confirmText }}</v-card-text>
+  <KasirPrintPreviewModal
+    v-model="showPrintModal"
+    :nomor-invoice="savedInvoiceNomor"
+    @update:modelValue="(val) => !val && onPrintModalClosed()"
+  />
 
-        <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-
-          <v-btn
-            v-if="isConfirmOnly"
-            color="primary"
-            variant="elevated"
-            @click="isConfirmDialogVisible = false"
-            >OK</v-btn
-          >
-
-          <template v-else>
-            <v-btn
-              variant="text"
-              @click="isConfirmDialogVisible = false"
-              :disabled="isSaving"
-              >Tidak</v-btn
-            >
-            <v-btn
-              color="primary"
-              variant="elevated"
-              @click="executeSave"
-              :loading="isSaving"
-              >Ya, Simpan</v-btn
-            >
-          </template>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </PageLayout>
+  <v-dialog v-model="isConfirmDialogVisible" max-width="400px" persistent>
+    <v-card class="rounded-lg">
+      <v-card-title
+        class="bg-primary text-white text-subtitle-1 pa-4 d-flex align-center"
+      >
+        <v-icon color="white" class="mr-2">mdi-help-circle</v-icon>
+        {{ confirmTitle }}
+      </v-card-title>
+      <v-card-text class="pa-6 text-center font-weight-medium">{{
+        confirmText
+      }}</v-card-text>
+      <v-card-actions class="pa-4 border-t">
+        <v-spacer></v-spacer>
+        <v-btn
+          variant="text"
+          @click="isConfirmDialogVisible = false"
+          :disabled="isSaving"
+          >Tidak</v-btn
+        >
+        <v-btn
+          color="primary"
+          variant="elevated"
+          @click="executeSave"
+          :loading="isSaving"
+          >Ya, Simpan</v-btn
+        >
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
-.kasir-wrapper :deep(*) {
-  font-size: 11px !important;
+.text-right-input :deep(input) {
+  text-align: right;
+  font-weight: bold;
 }
-
-.total-text :deep(span) {
-  font-size: 18px !important;
+.small-input {
+  max-width: 90px;
 }
-
-/* Hanya mewarnai header tabel menjadi biru */
+.small-input :deep(input) {
+  text-align: right;
+  padding: 0;
+  font-weight: bold;
+}
+.border-l-primary {
+  border-left: 4px solid #1976d2 !important;
+}
+.barcode-scanner :deep(input) {
+  font-size: 13px !important;
+  font-weight: bold;
+  color: #1976d2;
+}
+.cursor-pointer :deep(input) {
+  cursor: pointer;
+}
 .colored-header :deep(thead th) {
   background-color: #1976d2 !important;
   color: white !important;
   font-weight: bold !important;
   text-transform: uppercase;
 }
-
-/* Biar teks di dalam tabel tetap 11px tapi tidak merusak komponen lain */
-.colored-header :deep(td),
-.colored-header :deep(th) {
-  font-size: 11px !important;
-}
-
-.kasir-wrapper {
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 12px;
-  padding: 12px;
-  height: calc(100vh - 100px);
-  background: #fcfcfc;
-}
-
-.left-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.main-panel {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.desktop-form-section {
-  padding: 10px;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  background: white;
-}
-
-.clickable-input :deep(input) {
-  cursor: pointer !important;
-}
-
-.barcode-scanner :deep(input) {
-  font-size: 12px !important;
-  font-weight: bold;
-  color: #1976d2;
-}
-
-.summary-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2px;
-}
-
-.small-input {
-  max-width: 90px;
-}
-
-.small-input :deep(input) {
-  text-align: right;
-  padding: 0;
+:deep(input::-webkit-outer-spin-button),
+:deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
 }
 </style>

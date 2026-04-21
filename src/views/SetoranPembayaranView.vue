@@ -1,492 +1,331 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
-import type { VDataTableHeaders } from "vuetify/components";
+import { ref, computed, watch, onMounted } from "vue";
 import { format, subDays } from "date-fns";
 import api from "@/services/api";
-import PageLayout from "@/components/PageLayout.vue";
 import { useToast } from "vue-toastification";
-import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "vue-router";
 import { formatRupiah } from "@/utils/formatRupiah";
+
+// Components & Composables
+import BaseBrowse from "@/components/BaseBrowse.vue";
+import ConfirmDeleteDialog from "@/components/dialogs/ConfirmDeleteDialog.vue";
 import SetoranPembayaranPrintModal from "@/components/SetoranPembayaranPrintModal.vue";
+import { useBrowse } from "@/composables/useBrowse";
 
 const toast = useToast();
-const authStore = useAuthStore();
 const router = useRouter();
 const MENU_ID = "33";
 
-// --- State ---
-const masterData = ref<any[]>([]);
-const detailsData = ref<Record<string, any[]>>({});
-const selected = ref<any[]>([]);
-const expanded = ref<string[]>([]);
-const isLoading = ref(true);
-const search = ref("");
-const showPrintModal = ref(false);
-const printNomor = ref("");
-
-const startDate = ref(format(subDays(new Date(), 30), "yyyy-MM-dd"));
-const endDate = ref(format(new Date(), "yyyy-MM-dd"));
-
-// Hak Akses
-const canInsert = computed(() => authStore.can(MENU_ID, "insert"));
-const canEdit = computed(() => authStore.can(MENU_ID, "edit"));
-const canDelete = computed(() => authStore.can(MENU_ID, "delete"));
-const isSingleSelected = computed(
-  () => selected.value && selected.value.length === 1,
-);
-
-// Logika Bisnis: Data otomatis tidak boleh diubah/hapus
-const isSelectedOtomatis = computed(() => {
-  const item = selected.value?.[0];
-  if (!item) return false;
-  // Cek jika item adalah objek (Otomatis) atau cari di masterData jika item hanya string Nomor
-  const fullItem =
-    typeof item === "object"
-      ? item
-      : masterData.value.find((d) => d.Nomor === item);
-  return fullItem?.Otomatis === "YA";
-});
-
-const masterHeaders: any[] = [
-  { title: "Nomor", key: "Nomor", width: "150px", fixed: true },
-  { title: "Tanggal", key: "Tanggal", width: "100px" },
-  { title: "Jenis", key: "JenisBayar", width: "100px" },
-  { title: "Nominal", key: "Nominal", align: "end", width: "120px" },
-  { title: "Dibayar", key: "diBayarkan", align: "end", width: "120px" },
-  { title: "Sisa", key: "Sisa", align: "end", width: "120px" },
-  { title: "Customer", key: "Customer", minWidth: "200px" },
-  { title: "Bank", key: "NamaBank", width: "120px" },
-  { title: "Otomatis", key: "Otomatis", width: "80px", align: "center" },
-  { title: "", key: "data-table-expand" },
-];
-
-// --- Methods ---
-
-const fetchData = async () => {
-  isLoading.value = true;
-  try {
+// 1. Setup Composable Logic
+const {
+  items,
+  isLoading,
+  canInsert,
+  canEdit,
+  canDelete,
+  selected,
+  selectedItem,
+  isSingleSelected,
+  fetchData,
+} = useBrowse({
+  menuId: MENU_ID,
+  fetchApi: async () => {
     const response = await api.get("/setoran-pembayaran", {
       params: { startDate: startDate.value, endDate: endDate.value },
     });
-    masterData.value = response.data;
-  } catch (error) {
-    toast.error("Gagal memuat data setoran.");
-  } finally {
-    isLoading.value = false;
-  }
-};
+    return response.data;
+  },
+});
 
-const fetchDetails = async (payload: any) => {
-  if (!payload) return;
+// Filter Tanggal
+const startDate = ref(format(subDays(new Date(), 30), "yyyy-MM-dd"));
+const endDate = ref(format(new Date(), "yyyy-MM-dd"));
+watch([startDate, endDate], fetchData);
 
-  // Jika return-object aktif, payload adalah objek utuh { Nomor, Tanggal, ... }
-  // Jika tidak, payload adalah string Nomor.
-  const nomor = typeof payload === "string" ? payload : payload?.Nomor;
+// 2. Ref & State Lokal
+const detailsData = ref<Record<string, any[]>>({});
+const loadingDetails = ref<Set<string>>(new Set());
+const expanded = ref<any[]>([]); // Pastikan tipe any[] untuk Vuetify
 
-  if (!nomor || detailsData.value[nomor]) return;
+// State Dialog Cetak & Hapus
+const showPrintModal = ref(false);
+const printNomor = ref("");
+const showDeleteDialog = ref(false);
+const isDeleting = ref(false);
 
+// 3. Logika Bisnis: Data otomatis tidak boleh diubah/hapus
+const isSelectedOtomatis = computed(() => {
+  const item = selectedItem.value;
+  return item?.Otomatis === "YA";
+});
+
+// 4. Table Headers (Hapus data-table-expand)
+const masterHeaders = [
+  { title: "Nomor", key: "Nomor", width: "150px" },
+  { title: "Tanggal", key: "Tanggal", width: "100px" },
+  { title: "Jenis", key: "JenisBayar", width: "100px" },
+  { title: "Nominal", key: "Nominal", align: "end" as const, width: "120px" },
+  {
+    title: "Dibayar",
+    key: "diBayarkan",
+    align: "end" as const,
+    width: "120px",
+  },
+  { title: "Sisa", key: "Sisa", align: "end" as const, width: "120px" },
+  { title: "Customer", key: "Customer", minWidth: "200px" },
+  { title: "Bank", key: "NamaBank", width: "120px" },
+  {
+    title: "Otomatis",
+    key: "Otomatis",
+    width: "80px",
+    align: "center" as const,
+  },
+];
+
+const detailHeaders = [
+  { title: "Inv. Bayar", key: "Invoice", width: "150px" },
+  { title: "Tgl Inv", key: "TglInvoice", width: "100px" },
+  {
+    title: "Nominal Inv",
+    key: "Nominal",
+    align: "end" as const,
+    width: "130px",
+  },
+  {
+    title: "Jumlah Bayar",
+    key: "Bayar",
+    align: "end" as const,
+    width: "130px",
+  },
+  { title: "Keterangan", key: "Keterangan", minWidth: "200px" },
+];
+
+// 5. Load Details (Expanded Row)
+const loadDetails = async (newlyExpanded: any[]) => {
+  expanded.value = newlyExpanded;
+  if (newlyExpanded.length === 0) return;
+
+  const lastItem = newlyExpanded[newlyExpanded.length - 1];
+  const nomor = typeof lastItem === "object" ? lastItem.Nomor : lastItem;
+
+  if (!nomor || detailsData.value[nomor] || loadingDetails.value.has(nomor))
+    return;
+
+  loadingDetails.value.add(nomor);
   try {
     const res = await api.get(`/setoran-pembayaran/${nomor}/details`);
     detailsData.value[nomor] = res.data;
   } catch (error) {
     toast.error(`Gagal memuat rincian untuk ${nomor}`);
+  } finally {
+    loadingDetails.value.delete(nomor);
   }
 };
 
-// Logika Pewarnaan Baris
-const getRowTextColor = (item: any) => {
-  if (item.Otomatis === "YA") return "text-blue-darken-2 font-weight-bold"; // Biru jika otomatis
-  if (Number(item.Sisa) !== 0) return "text-red-darken-2"; // Merah jika belum lunas
-  return "";
+// 6. Logika Pewarnaan Baris
+const getRowProps = (data: any) => {
+  const raw = data.item?.raw || data.item;
+  if (raw.Otomatis === "YA")
+    return { class: "text-blue-darken-2 font-weight-bold" };
+  if (Number(raw.Sisa) !== 0) return { class: "text-error" };
+  return {};
 };
 
-// Fungsi ini yang akan disuntikkan ke tabel untuk mengatur kelas (warna) tiap baris
-const myRowProps = (data: any) => {
-  // Ambil data mentah dengan aman
-  const rawItem = data.item?.raw || data.item;
-  return {
-    class: getRowTextColor(rawItem),
-    style: "cursor: pointer", // Biar kursor jadi tangan saat di-hover
-  };
-};
-
-const handleEdit = () => {
-  // Gunakan optional chaining untuk keamanan
-  const item = selected.value?.[0];
-
-  if (item && item.Nomor) {
-    console.log("Navigasi ke:", item.Nomor);
-    router.push(`/transaksi/setoran-pembayaran/ubah/${item.Nomor}`);
-  } else {
-    toast.warning("Silakan pilih baris terlebih dahulu.");
-  }
+// 7. Navigasi & Aksi
+const handleAdd = () => router.push("/transaksi/setoran-pembayaran/baru");
+const handleEdit = (item: any) => {
+  if (isSelectedOtomatis.value)
+    return toast.warning("Setoran Otomatis tidak bisa diubah.");
+  router.push(`/transaksi/setoran-pembayaran/ubah/${item.Nomor}`);
 };
 
 const handlePrint = () => {
-  const item = selected.value?.[0];
-  const nomor = typeof item === "object" ? item?.Nomor : item;
-
-  if (nomor) {
-    printNomor.value = nomor;
-    showPrintModal.value = true;
-  } else {
-    toast.warning("Pilih satu data setoran untuk dicetak.");
-  }
+  if (!selectedItem.value) return;
+  printNomor.value = selectedItem.value.Nomor;
+  showPrintModal.value = true;
 };
 
-// Update handleDelete agar lebih aman
-const handleDelete = async () => {
-  const selectedItem = selected.value?.[0];
-  if (!selectedItem) return;
-
-  if (isSelectedOtomatis.value) {
+const handleDeleteClick = () => {
+  if (isSelectedOtomatis.value)
     return toast.warning("Setoran Otomatis tidak bisa dihapus.");
-  }
-
-  if (confirm(`Yakin hapus setoran ${selectedItem.Nomor}?`)) {
-    try {
-      await api.delete(`/setoran-pembayaran/${selectedItem.Nomor}`);
-      toast.success("Data dihapus.");
-      fetchData();
-      selected.value = [];
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || "Gagal hapus.");
-    }
-  }
+  if (selected.value.length > 0) showDeleteDialog.value = true;
 };
 
-const handleExport = () => {
-  // Logika export excel/csv
-  toast.info("Fitur export sedang disiapkan.");
-};
-
-const handleRowClick = (event: PointerEvent, { item }: { item: any }) => {
-  const raw = item?.raw || item;
-  // Toggle selection berdasarkan Nomor
-  if (selected.value.length > 0 && selected.value[0]?.Nomor === raw.Nomor) {
+const confirmDelete = async () => {
+  if (!selectedItem.value) return;
+  isDeleting.value = true;
+  try {
+    await api.delete(`/setoran-pembayaran/${selectedItem.value.Nomor}`);
+    toast.success("Data dihapus.");
+    showDeleteDialog.value = false;
+    fetchData();
     selected.value = [];
-  } else {
-    selected.value = [raw];
+  } catch (error: any) {
+    toast.error(error.response?.data?.message || "Gagal hapus.");
+  } finally {
+    isDeleting.value = false;
   }
 };
-
-// Pastikan formatNumber tersedia untuk detail
-const formatNumberLocal = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return "0";
-  return new Intl.NumberFormat("id-ID").format(value);
-};
-
-onMounted(fetchData);
 </script>
 
 <template>
-  <PageLayout
+  <BaseBrowse
+    v-model:selected="selected"
+    item-value="Nomor"
     title="Setoran Pembayaran"
-    :menu-id="MENU_ID"
+    menu-id="33"
     icon="mdi-cash-register"
+    search-placeholder="Cari..."
+    :headers="masterHeaders"
+    :items="items || []"
+    :is-loading="isLoading"
+    :can-insert="canInsert"
+    :can-edit="canEdit"
+    :can-delete="canDelete"
+    :can-export="true"
+    :show-expand="true"
+    :expanded="expanded"
+    :loading-details="loadingDetails"
+    :row-props-fn="getRowProps"
+    @update:expanded="loadDetails"
+    @refresh="fetchData"
+    @add="handleAdd"
+    @edit="handleEdit"
+    @delete="handleDeleteClick"
+    @export="() => toast.info('Fitur export sedang disiapkan.')"
   >
-    <template #header-actions>
-      <v-btn
-        v-if="canInsert"
-        size="small"
-        color="primary"
-        prepend-icon="mdi-plus"
-        @click="router.push('/transaksi/setoran-pembayaran/baru')"
-        >Baru</v-btn
-      >
+    <template #filter-right-prepend>
+      <v-text-field
+        v-model="startDate"
+        type="date"
+        label="Mulai"
+        density="compact"
+        variant="outlined"
+        hide-details
+        class="mr-2 bg-white"
+        style="max-width: 140px"
+      ></v-text-field>
+      <v-text-field
+        v-model="endDate"
+        type="date"
+        label="Sampai"
+        density="compact"
+        variant="outlined"
+        hide-details
+        class="mr-2 bg-white"
+        style="max-width: 140px"
+      ></v-text-field>
+    </template>
 
-      <v-btn
-        v-if="canEdit"
-        size="small"
-        :disabled="!isSingleSelected || isSelectedOtomatis"
-        prepend-icon="mdi-pencil"
-        @click="handleEdit"
-        >Ubah</v-btn
-      >
+    <template #filter-right>
+      <div class="d-flex align-center ga-4 ml-2">
+        <div
+          class="d-flex align-center"
+          title="Pembayaran otomatis dari sistem/invoice"
+        >
+          <v-icon color="blue-darken-2" size="x-small" class="mr-1"
+            >mdi-square</v-icon
+          >
+          <span class="text-caption font-weight-bold text-blue-darken-2"
+            >Otomatis</span
+          >
+        </div>
+        <div
+          class="d-flex align-center"
+          title="Ada sisa pembayaran yang belum dilunasi"
+        >
+          <v-icon color="error" size="x-small" class="mr-1">mdi-square</v-icon>
+          <span class="text-caption font-weight-bold text-error">Ada Sisa</span>
+        </div>
+      </div>
+    </template>
 
-      <v-btn
-        v-if="canDelete"
-        size="small"
-        color="error"
-        :disabled="!isSingleSelected || isSelectedOtomatis"
-        prepend-icon="mdi-delete"
-        @click="handleDelete"
-        >Hapus</v-btn
-      >
-
+    <template #extra-actions>
       <v-btn
         size="small"
         color="secondary"
         :disabled="!isSingleSelected"
         prepend-icon="mdi-printer"
         @click="handlePrint"
-        >Cetak</v-btn
+        class="ml-2"
       >
-
-      <v-btn
-        size="small"
-        variant="outlined"
-        prepend-icon="mdi-file-export"
-        @click="handleExport"
-        >Export</v-btn
-      >
+        Cetak
+      </v-btn>
     </template>
 
-    <div class="browse-content">
-      <div class="filter-section d-flex align-center mb-4">
-        <v-text-field
-          v-model="startDate"
-          type="date"
-          label="Mulai"
-          density="compact"
-          variant="outlined"
-          hide-details
-          class="mr-2"
-          style="max-width: 160px"
-        />
-        <v-text-field
-          v-model="endDate"
-          type="date"
-          label="Sampai"
-          density="compact"
-          variant="outlined"
-          hide-details
-          class="mr-2"
-          style="max-width: 160px"
-        />
-        <v-text-field
-          v-model="search"
-          label="Cari..."
-          density="compact"
-          variant="outlined"
-          hide-details
-          prepend-inner-icon="mdi-magnify"
-        />
-        <v-btn
-          @click="fetchData"
-          icon="mdi-refresh"
-          variant="text"
-          class="ml-2"
-          :loading="isLoading"
-        />
-      </div>
+    <template #[`item.Tanggal`]="{ item }">
+      {{
+        item.raw?.Tanggal
+          ? format(new Date(item.raw.Tanggal), "dd/MM/yyyy")
+          : "-"
+      }}
+    </template>
 
-      <div class="table-container">
-        <v-data-table
-          v-model="selected"
-          v-model:expanded="expanded"
-          :headers="masterHeaders"
-          :items="masterData"
-          :search="search"
-          :loading="isLoading"
-          item-value="Nomor"
-          select-strategy="single"
-          return-object
-          show-select
-          show-expand
-          density="compact"
-          fixed-header
-          class="desktop-table fill-height-table colored-header"
-          :row-props="myRowProps"
-          @click:row="handleRowClick"
-          @update:expanded="
-            (val) => {
-              if (val && val.length > 0) fetchDetails(val[val.length - 1]);
-            }
-          "
-        >
-          <template #[`item.Tanggal`]="{ item }">
-            {{
-              item.raw?.Tanggal
-                ? format(new Date(item.raw.Tanggal), "dd/MM/yyyy")
-                : "-"
-            }}
-          </template>
+    <template #[`item.Nominal`]="{ value }">{{ formatRupiah(value) }}</template>
+    <template #[`item.diBayarkan`]="{ value }">{{
+      formatRupiah(value)
+    }}</template>
 
-          <template #[`item.Nominal`]="{ value }">{{
+    <template #[`item.Sisa`]="{ value }">
+      <span class="font-weight-bold">{{ formatRupiah(value) }}</span>
+    </template>
+
+    <template #[`item.Otomatis`]="{ value }">
+      <v-chip
+        v-if="value === 'YA'"
+        size="x-small"
+        color="blue-darken-2"
+        variant="flat"
+        class="font-weight-bold"
+      >
+        OTOMATIS
+      </v-chip>
+      <span v-else>-</span>
+    </template>
+
+    <template #detail="{ item }">
+      <v-data-table
+        :headers="detailHeaders"
+        :items="detailsData[item.Nomor]"
+        density="compact"
+        class="detail-table colored-header-sub zebra-table"
+        hide-default-footer
+        width="100%"
+      >
+        <template #[`item.TglInvoice`]="{ value }">
+          {{ value ? format(new Date(value), "dd/MM/yy") : "-" }}
+        </template>
+        <template #[`item.Nominal`]="{ value }">{{
+          formatRupiah(value)
+        }}</template>
+        <template #[`item.Bayar`]="{ value }">
+          <span class="text-primary font-weight-bold">{{
             formatRupiah(value)
-          }}</template>
-          <template #[`item.diBayarkan`]="{ value }">{{
-            formatRupiah(value)
-          }}</template>
-          <template #[`item.Sisa`]="{ value }">
-            <span class="font-weight-bold">{{ formatRupiah(value) }}</span>
-          </template>
+          }}</span>
+        </template>
+      </v-data-table>
+    </template>
+  </BaseBrowse>
 
-          <template #[`item.Otomatis`]="{ value }">
-            <v-chip
-              v-if="value === 'YA'"
-              size="x-small"
-              color="blue-darken-2"
-              variant="flat"
-              class="font-weight-bold"
-              >OTOMATIS</v-chip
-            >
-            <span v-else>-</span>
-          </template>
+  <ConfirmDeleteDialog
+    v-model="showDeleteDialog"
+    :item-name="`Setoran ${selectedItem?.Nomor}`"
+    :is-loading="isDeleting"
+    @confirm="confirmDelete"
+  />
 
-          <template #expanded-row="{ columns, item }">
-            <tr>
-              <td :colspan="columns.length" class="expanded-detail-cell">
-                <div class="detail-container">
-                  <div class="detail-table-wrapper elevation-1">
-                    <div
-                      v-if="!detailsData[item.Nomor]"
-                      class="text-center py-6"
-                    >
-                      <v-progress-circular
-                        indeterminate
-                        size="28"
-                        width="3"
-                        color="primary"
-                      ></v-progress-circular>
-                      <div
-                        class="mt-2 text-primary font-weight-bold"
-                        style="font-size: 11px"
-                      >
-                        Memuat rincian invoice...
-                      </div>
-                    </div>
-
-                    <v-data-table
-                      v-else
-                      :items="detailsData[item.Nomor]"
-                      :headers="[
-                        { title: 'Inv. Bayar', key: 'Invoice', width: '150px' },
-                        { title: 'Tgl Inv', key: 'TglInvoice', width: '100px' },
-                        {
-                          title: 'Nominal Inv',
-                          key: 'Nominal',
-                          align: 'end',
-                          width: '130px',
-                        },
-                        {
-                          title: 'Jumlah Bayar',
-                          key: 'Bayar',
-                          align: 'end',
-                          width: '130px',
-                        },
-                        {
-                          title: 'Keterangan',
-                          key: 'Keterangan',
-                          minWidth: '200px',
-                        },
-                      ]"
-                      density="compact"
-                      hide-default-footer
-                      class="detail-table colored-header-sub zebra-table"
-                    >
-                      <template #[`item.TglInvoice`]="{ value }">
-                        {{ value ? format(new Date(value), "dd/MM/yy") : "-" }}
-                      </template>
-                      <template #[`item.Nominal`]="{ value }">{{
-                        formatRupiah(value)
-                      }}</template>
-                      <template #[`item.Bayar`]="{ value }">
-                        <span class="text-primary font-weight-bold">{{
-                          formatRupiah(value)
-                        }}</span>
-                      </template>
-                    </v-data-table>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </template>
-
-          <template v-slot:loading>
-            <v-skeleton-loader type="table-row@10"></v-skeleton-loader>
-          </template>
-        </v-data-table>
-      </div>
-    </div>
-
-    <SetoranPembayaranPrintModal v-model="showPrintModal" :nomor="printNomor" />
-  </PageLayout>
+  <SetoranPembayaranPrintModal v-model="showPrintModal" :nomor="printNomor" />
 </template>
 
 <style scoped>
-/* 1. Global Font 11px */
-.browse-content :deep(*) {
-  font-size: 11px !important;
-}
-
-.browse-content {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 120px);
-}
-
-.table-container {
-  flex-grow: 1;
-  overflow: hidden;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-}
-
-/* --- 2. KONSISTENSI BIRU (PRIMARY) --- */
-
-/* Header Tabel Master */
-.colored-header :deep(thead th) {
-  background-color: #1976d2 !important;
-  color: white !important;
-  font-weight: bold !important;
-  text-transform: uppercase;
-}
-
-/* Header Tabel Detail (Dark Slate) */
 .colored-header-sub :deep(thead th) {
   background-color: #455a64 !important;
   color: white !important;
   font-size: 10px !important;
+  text-transform: uppercase;
 }
-
-/* Checkbox Header Putih */
-.colored-header :deep(thead .v-checkbox-btn .v-selection-control__wrapper) {
-  color: white !important;
-}
-
-/* Highlight Baris Dipilih */
-.desktop-table :deep(tr.v-data-table__selected) {
-  background-color: #e3f2fd !important;
-}
-
-/* Hover Effect */
-.desktop-table :deep(tbody tr:hover),
-.zebra-table :deep(tbody tr:hover) {
-  cursor: pointer;
-  background-color: #f5f5f5 !important;
-}
-
-/* Zebra Striping Tabel Detail */
-.zebra-table :deep(tbody tr:nth-of-type(odd)) {
-  background-color: #fcfcfc !important;
-}
-
-/* --- 3. EXPANDED DETAIL STYLING --- */
-.expanded-detail-cell {
-  padding: 0 !important;
-  background-color: #f8f9fa;
-}
-
-.detail-container {
-  padding: 10px 16px 10px 50px; /* Indentasi agar rapi */
-}
-
-.detail-table-wrapper {
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  overflow: hidden;
-  background-color: white;
-}
-
-/* Pastikan Scroll Aman */
-.desktop-table {
-  height: 100%;
-}
-.desktop-table :deep(.v-table__wrapper) {
-  height: 100%;
-  overflow-y: auto;
+:deep(.text-error),
+:deep(.text-error td) {
+  color: #d32f2f !important;
 }
 </style>
