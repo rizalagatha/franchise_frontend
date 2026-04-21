@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import { format } from "date-fns";
 import api from "@/services/api";
 import { useToast } from "vue-toastification";

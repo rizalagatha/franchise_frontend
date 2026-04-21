@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, watch } from "vue";
 import { format, subDays } from "date-fns";
 import api from "@/services/api";
 import { useToast } from "vue-toastification";
 import { useRouter } from "vue-router";
-import { formatRupiah } from "@/utils/formatRupiah";
 
 // Components & Composables
 import BaseBrowse from "@/components/BaseBrowse.vue";

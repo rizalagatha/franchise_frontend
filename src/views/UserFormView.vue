@@ -4,6 +4,23 @@ import { useRoute } from "vue-router";
 import api from "@/services/api";
 import { useToast } from "vue-toastification";
 
+interface MenuItem {
+  men_id: string;
+  men_nama: string;
+  view: boolean;
+  insert: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
+interface UserForm {
+  Kode: string;
+  Nama: string;
+  Password: string;
+  Aktif: boolean;
+  listMenu: MenuItem[];
+}
+
 // Components & Composables
 import BaseForm from "@/components/BaseForm.vue";
 import { useForm } from "@/composables/useForm";
@@ -36,7 +53,7 @@ const {
   formData,
   fetchData,
   executeSave,
-} = useForm({
+} = useForm<UserForm>({
   menuId: MENU_ID,
   onSuccessRoute: "/tools/users",
   initialData: {
@@ -44,7 +61,7 @@ const {
     Nama: "",
     Password: "",
     Aktif: true,
-    listMenu: [] as any[],
+    listMenu: [] as MenuItem[],
   },
 
   fetchApi: async (): Promise<any> => {

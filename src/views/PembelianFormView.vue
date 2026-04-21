@@ -35,7 +35,6 @@ const {
   isLoading,
   showSaveDialog,
   showCancelDialog,
-  goBack,
   params,
   executeSave,
   showCloseDialog,

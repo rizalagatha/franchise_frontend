@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onUnmounted, markRaw } from 'vue';
+import { computed, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useAuthStore } from "./stores/authStore";
 
 // Impor layout secara statis agar Vite tidak bingung saat proses build
-import DefaultLayout from '@/layouts/DefaultLayout.vue';
-import EmptyLayout from '@/layouts/EmptyLayout.vue';
-import PrintLayout from '@/layouts/PrintLayout.vue';
+import DefaultLayout from "@/layouts/DefaultLayout.vue";
+import EmptyLayout from "@/layouts/EmptyLayout.vue";
+import PrintLayout from "@/layouts/PrintLayout.vue";
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -14,7 +14,7 @@ const route = useRoute();
 const layouts: Record<string, any> = {
   DefaultLayout,
   EmptyLayout,
-  PrintLayout
+  PrintLayout,
 };
 
 onUnmounted(() => {
@@ -23,7 +23,7 @@ onUnmounted(() => {
 
 // Pilih layout berdasarkan meta data di router
 const layoutComponent = computed(() => {
-  const layoutName = (route.meta.layout as string) || 'DefaultLayout';
+  const layoutName = (route.meta.layout as string) || "DefaultLayout";
   // Jika layout ditemukan di mapping, gunakan. Jika tidak, balik ke DefaultLayout.
   return layouts[layoutName] || DefaultLayout;
 });

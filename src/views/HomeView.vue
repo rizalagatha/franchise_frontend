@@ -18,7 +18,6 @@ import {
   LinearScale,
   Filler, // <--- Tambah untuk efek fill Area
 } from "chart.js";
-import type { TooltipItem } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 
 ChartJS.register(
