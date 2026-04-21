@@ -1,14 +1,17 @@
-import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from '@/stores/authStore';
+import axios, {
+  type AxiosInstance,
+  type InternalAxiosRequestConfig,
+} from "axios";
+import { useAuthStore } from "@/stores/authStore";
 
 // Buat instance Axios dengan tipe yang jelas
 const api: AxiosInstance = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   withCredentials: true,
   validateStatus: function (status) {
     // Anggap sukses jika status 2xx ATAU 304
     return (status >= 200 && status < 300) || status === 304;
-  }
+  },
 });
 
 // Buat Interceptor dengan parameter yang sudah diberi tipe
@@ -31,7 +34,7 @@ api.interceptors.request.use(
   (error) => {
     // Lakukan sesuatu jika ada error pada request
     return Promise.reject(error);
-  }
+  },
 );
 
 // Versi baru yang lebih "pintar"
@@ -40,10 +43,9 @@ api.interceptors.response.use(
   (error) => {
     const authStore = useAuthStore();
     if (error.response && error.response.status === 401) {
-
       // --- PERBAIKAN DI SINI ---
       // Cek apakah URL yang error BUKAN URL validasi PIN
-      if (!error.config.url.includes('/auth-pin/validate')) {
+      if (!error.config.url.includes("/auth-pin/validate")) {
         // Jika BUKAN dari validasi PIN, baru anggap sesi habis
         authStore.isSessionExpired = true;
       }
@@ -51,7 +53,7 @@ api.interceptors.response.use(
       // kita biarkan komponen (SoCreateView) yang menanganinya di blok `catch`.
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
