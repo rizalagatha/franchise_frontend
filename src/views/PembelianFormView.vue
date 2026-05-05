@@ -334,13 +334,7 @@ onMounted(() => {
 
     <template #right-column>
       <div
-        class="desktop-form-section pa-0 d-flex flex-column elevation-1"
-        style="
-          flex-grow: 1;
-          min-height: 0;
-          margin-bottom: 0 !important;
-          overflow: hidden;
-        "
+        class="desktop-form-section pa-0 elevation-1 table-wrapper-container"
       >
         <v-data-table
           :headers="tableHeaders"
@@ -424,15 +418,23 @@ onMounted(() => {
   margin: 0;
 }
 
-/* Trik Flexbox agar v-table__wrapper mau memunculkan scrollbar vertikal */
-.desktop-table {
+/* --- CSS PENGUNCI SCROLLBAR TABEL --- */
+.table-wrapper-container {
+  height: 100%; /* Paksa kotak putih memenuhi tinggi right-column */
   display: flex;
   flex-direction: column;
-  height: 100%;
+  margin-bottom: 0 !important;
+}
+
+.desktop-table {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* KUNCI FLEXBOX: Wajib agar child bisa scroll */
 }
 
 .desktop-table :deep(.v-table__wrapper) {
-  flex: 1 1 auto;
-  overflow-y: auto !important;
+  flex-grow: 1;
+  overflow-y: auto !important; /* Paksa scrollbar vertikal muncul di sini */
 }
 </style>
