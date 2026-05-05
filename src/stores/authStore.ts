@@ -149,15 +149,18 @@ export const useAuthStore = defineStore("auth", () => {
     menuId: string,
     action: "view" | "insert" | "edit" | "delete",
   ): boolean {
-    // Konversi menuId (string) ke number sebelum membandingkan
-    const idAsNumber = parseInt(menuId, 10);
+    // 1. Cari permission berdasarkan hak_men_id (pastikan tipe data sama-sama string)
+    const permission = permissions.value.find(
+      (p: any) => String(p.hak_men_id) === String(menuId),
+    );
 
-    // Cari permission berdasarkan id (number)
-    const permission = permissions.value.find((p) => p.id === idAsNumber);
+    if (!permission) return false;
 
-    // Jika permission ditemukan, kembalikan nilai boolean dari action yang diminta
-    // Jika tidak, kembalikan false
-    return permission ? permission[action] : false;
+    // 2. Petakan action ('view') ke nama kolom database ('hak_men_view')
+    const dbColumn = `hak_men_${action}`;
+
+    // 3. Cek apakah nilainya adalah 'Y'
+    return permission[dbColumn] === "Y";
   }
 
   function handleSessionExpired() {
