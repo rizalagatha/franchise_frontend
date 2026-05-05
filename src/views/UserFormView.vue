@@ -15,8 +15,9 @@ interface MenuItem {
 
 interface UserForm {
   Kode: string;
-  Nama: string;
+  Nama: string; // Saat ini kita map ke username di backend
   Password: string;
+  Role: string; // Tambahkan ini
   Aktif: boolean;
   listMenu: MenuItem[];
 }
@@ -60,6 +61,7 @@ const {
     Kode: "",
     Nama: "",
     Password: "",
+    Role: "user", // Default sebagai user biasa
     Aktif: true,
     listMenu: [] as MenuItem[],
   },
@@ -85,10 +87,11 @@ const {
     if (isEditMode.value && res.data.userData) {
       const u = res.data.userData.user;
       defaultForm = {
-        Kode: u.user_kode,
-        Nama: u.user_nama,
+        Kode: u.username,
+        Nama: u.username,
         Password: "",
-        Aktif: u.user_aktif === "Y",
+        Role: u.role || "user",
+        Aktif: true, // Tabel users master saat ini belum ada kolom aktif, kita default true
       };
 
       res.data.userData.hakAkses.forEach((hak: any) => {
@@ -119,6 +122,7 @@ const {
         Kode: data.Kode,
         Nama: data.Nama,
         Password: data.Password,
+        Role: data.Role, // Tambahkan ini
         Aktif: data.Aktif ? "Y" : "N",
         hakAkses: payloadHakAkses,
       },
@@ -195,6 +199,16 @@ onMounted(() => fetchData());
         <v-text-field
           v-model="formData.Nama"
           label="Nama Lengkap"
+          density="compact"
+          variant="outlined"
+          hide-details
+          class="bg-white mb-3"
+        />
+
+        <v-select
+          v-model="formData.Role"
+          label="Role User"
+          :items="['admin', 'user']"
           density="compact"
           variant="outlined"
           hide-details
