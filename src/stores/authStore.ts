@@ -36,9 +36,11 @@ export const useAuthStore = defineStore("auth", () => {
   // --- STATE ---
   // State utama yang akan kita simpan
   const token = ref<string | null>(localStorage.getItem("authToken"));
-  const user = ref<User | null>(JSON.parse(localStorage.getItem("userData") || "null"));
+  const user = ref<User | null>(
+    JSON.parse(localStorage.getItem("userData") || "null"),
+  );
   const permissions = ref<Permission[]>(
-    JSON.parse(localStorage.getItem("userPermissions") || "[]")
+    JSON.parse(localStorage.getItem("userPermissions") || "[]"),
   );
   const isSessionExpired = ref(false);
 
@@ -53,7 +55,11 @@ export const useAuthStore = defineStore("auth", () => {
   const userCabang = computed(() => user.value?.cabang || "-");
   const userCabangNama = computed(() => user.value?.cabangNama || "");
   const allowedMenus = computed(() => {
-    return permissions.value.filter((p) => p.view).map((p) => p.id.toString()); // convert number ke string untuk match dengan menuId di router
+    // Pastikan memfilter hak_men_view yang bernilai 'Y'
+    // dan memetakan ke hak_men_id
+    return permissions.value
+      .filter((p: any) => p.hak_men_view === "Y")
+      .map((p: any) => String(p.hak_men_id));
   });
   const isTokenExpired = computed(() => {
     if (!token.value) return true; // Jika tidak ada token, anggap saja expired
@@ -105,7 +111,10 @@ export const useAuthStore = defineStore("auth", () => {
 
     localStorage.setItem("authToken", loginResponse.token);
     localStorage.setItem("userData", JSON.stringify(loginResponse.user));
-    localStorage.setItem("userPermissions", JSON.stringify(loginResponse.permissions));
+    localStorage.setItem(
+      "userPermissions",
+      JSON.stringify(loginResponse.permissions),
+    );
 
     router.push("/");
   }
@@ -136,7 +145,10 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  function can(menuId: string, action: "view" | "insert" | "edit" | "delete"): boolean {
+  function can(
+    menuId: string,
+    action: "view" | "insert" | "edit" | "delete",
+  ): boolean {
     // Konversi menuId (string) ke number sebelum membandingkan
     const idAsNumber = parseInt(menuId, 10);
 

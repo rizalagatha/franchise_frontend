@@ -12,6 +12,7 @@ interface NavItem {
   divider?: boolean;
   subItems?: NavItem[];
   onClick?: () => void;
+  menuId: string;
 }
 
 interface MenuSection {
@@ -51,34 +52,9 @@ const appBarClass = computed(() => ({
 }));
 
 // Access control helper (Sama seperti retail)
-const hasAccess = (routeNameOrPath?: string) => {
-  if (!routeNameOrPath) return true;
-
-  const authStore = useAuthStore();
-  const route = router
-    .getRoutes()
-    .find((r) => r.name === routeNameOrPath || r.path === routeNameOrPath);
-
-  if (!route) return false;
-
-  // Jika route tidak memerlukan login sama sekali, selalu tampilkan.
-  if (!route.meta.requiresAuth) {
-    return true;
-  }
-
-  // Jika route butuh login, cek apakah user sudah login.
-  if (!authStore.isAuthenticated) {
-    return false;
-  }
-
-  // Jika route butuh izin spesifik (punya menuId), cek izinnya.
-  if (route.meta.menuId) {
-    return authStore.allowedMenus.includes(route.meta.menuId as string);
-  }
-
-  // Jika sampai di sini, artinya route butuh login tapi tidak butuh izin spesifik.
-  // Karena user sudah login, maka tampilkan menunya.
-  return true;
+const canView = (menuId?: string) => {
+  if (!menuId) return true; // Jika tidak ada menuId, anggap boleh (seperti Dashboard)
+  return authStore.allowedMenus.includes(String(menuId));
 };
 
 // Menu configuration (BARU UNTUK FRANCHISE)
@@ -92,21 +68,25 @@ const menuItems: MenuItem[] = [
         title: "Customer",
         to: "/daftar/customer",
         icon: "mdi-account-outline",
+        menuId: "11",
       },
       {
         title: "Price List",
         to: "/daftar/price-list",
         icon: "mdi-format-list-numbered",
+        menuId: "12",
       },
       {
         title: "Cetak Barcode",
         to: "/daftar/cetak-barcode",
         icon: "mdi-barcode",
+        menuId: "13",
       },
       {
         title: "Rekening Bank",
         to: "/daftar/rekening",
         icon: "mdi-bank-outline",
+        menuId: "14",
       },
     ],
   },
@@ -119,32 +99,43 @@ const menuItems: MenuItem[] = [
         title: "Pembelian",
         to: "/transaksi/pembelian",
         icon: "mdi-cart-arrow-down",
+        menuId: "22",
       },
       {
         title: "Minta Barang Pusat",
         to: "/transaksi/minta-barang-kaosan",
         icon: "mdi-truck-delivery-outline",
+        menuId: "25",
       },
       {
         title: "Koreksi Stok",
         to: "/transaksi/koreksi-stok",
         icon: "mdi-pencil-outline",
+        menuId: "23",
       },
       {
         title: "Standar Stok",
         to: "/transaksi/standar-stok",
         icon: "mdi-database-outline",
+        menuId: "24",
       },
-      { title: "Kasir", to: "/transaksi/kasir", icon: "mdi-cash-register" },
+      {
+        title: "Kasir",
+        to: "/transaksi/kasir",
+        icon: "mdi-cash-register",
+        menuId: "31",
+      },
       {
         title: "Form Setoran Kasir",
         to: "/transaksi/fsk",
         icon: "mdi-cash-multiple",
+        menuId: "32",
       },
       {
         title: "Setoran Pembayaran",
         to: "/transaksi/setoran-pembayaran",
         icon: "mdi-bank-transfer",
+        menuId: "33",
       },
     ],
   },
@@ -162,6 +153,7 @@ const menuItems: MenuItem[] = [
             title: "Laporan Stok",
             to: "/laporan/stok",
             icon: "mdi-package-variant",
+            menuId: "51",
           },
         ],
       },
@@ -173,6 +165,7 @@ const menuItems: MenuItem[] = [
             title: "Laporan Penjualan",
             to: "/laporan/penjualan",
             icon: "mdi-receipt",
+            menuId: "52",
           },
         ],
       },
@@ -187,11 +180,13 @@ const menuItems: MenuItem[] = [
         title: "Backup Data",
         to: "/tools/backup",
         icon: "mdi-database-export-outline",
+        menuId: "2",
       },
       {
         title: "Master User",
         to: "/tools/users",
         icon: "mdi-account-group-outline",
+        menuId: "1",
       },
     ],
   },
@@ -252,11 +247,9 @@ onUnmounted(() => {
     <!-- Main Navigation Menu -->
     <nav class="main-navigation">
       <template v-for="menu in menuItems" :key="menu.title">
-        <!-- Standard Menu Items (non-Large) -->
+        <!-- 1. STANDARD MENU (Daftar, Transaksi, Tools) -->
         <v-menu
-          v-if="
-            !menu.isLarge && (!('to' in menu) || hasAccess(menu.to as string))
-          "
+          v-if="!menu.isLarge"
           v-model="menu.model.value"
           offset-y
           :close-on-content-click="false"
@@ -266,7 +259,9 @@ onUnmounted(() => {
           origin="top center"
         >
           <template #activator="{ props }">
+            <!-- Tombol Menu Utama hanya muncul jika ada minimal 1 item di dalamnya yang boleh dilihat -->
             <v-btn
+              v-if="menu.items?.some((item) => canView(item.menuId))"
               variant="text"
               v-bind="props"
               :prepend-icon="menu.icon"
@@ -279,17 +274,18 @@ onUnmounted(() => {
 
           <v-card class="nav-dropdown" elevation="8">
             <v-list class="nav-list" density="comfortable">
+              <!-- Filter item berdasarkan izin canView -->
               <template
-                v-for="(item, index) in (menu.items ?? []).filter(
-                  (i) => !i.to || hasAccess(i.to),
+                v-for="(item, index) in (menu.items ?? []).filter((i) =>
+                  canView(i.menuId),
                 )"
                 :key="index"
               >
                 <v-divider v-if="item.divider" class="nav-divider" />
 
-                <!-- Sub Menu Group -->
+                <!-- Sub Menu Group (Jika ada subItems) -->
                 <v-list-group
-                  v-else-if="'subItems' in item"
+                  v-else-if="item.subItems && item.subItems.length > 0"
                   :value="item.title"
                   class="nav-list-group"
                 >
@@ -303,22 +299,19 @@ onUnmounted(() => {
                     </v-list-item>
                   </template>
 
-                  <template
-                    v-for="subItem in (
-                      (item.subItems as NavItem[] | undefined) ?? []
-                    ).filter((si) => hasAccess(si.to))"
+                  <!-- Filter sub-item berdasarkan izin canView -->
+                  <v-list-item
+                    v-for="subItem in item.subItems.filter((si) =>
+                      canView(si.menuId),
+                    )"
                     :key="subItem.title"
+                    :to="subItem.to"
+                    :prepend-icon="subItem.icon"
+                    class="nav-list-item sub"
+                    @click="closeMenus"
                   >
-                    <!-- Regular Sub Item -->
-                    <v-list-item
-                      :to="subItem.to"
-                      :prepend-icon="subItem.icon"
-                      class="nav-list-item sub"
-                      @click="closeMenus"
-                    >
-                      <v-list-item-title>{{ subItem.title }}</v-list-item-title>
-                    </v-list-item>
-                  </template>
+                    <v-list-item-title>{{ subItem.title }}</v-list-item-title>
+                  </v-list-item>
                 </v-list-group>
 
                 <!-- Regular Menu Item -->
@@ -329,9 +322,7 @@ onUnmounted(() => {
                   class="nav-list-item"
                   @click="
                     () => {
-                      if (item.onClick) {
-                        item.onClick();
-                      }
+                      if (item.onClick) item.onClick();
                       closeMenus();
                     }
                   "
@@ -343,7 +334,7 @@ onUnmounted(() => {
           </v-card>
         </v-menu>
 
-        <!-- Large Menu Items with Sections -->
+        <!-- 2. LARGE MENU (Laporan) -->
         <v-menu
           v-else-if="menu.isLarge"
           v-model="menu.model.value"
@@ -354,7 +345,13 @@ onUnmounted(() => {
           class="nav-menu large"
         >
           <template #activator="{ props }">
+            <!-- Tombol muncul jika ada minimal 1 section yang memiliki item yang boleh dilihat -->
             <v-btn
+              v-if="
+                menu.sections?.some((sec) =>
+                  sec.items.some((i) => canView(i.menuId)),
+                )
+              "
               variant="text"
               v-bind="props"
               :prepend-icon="menu.icon"
@@ -368,10 +365,14 @@ onUnmounted(() => {
           <v-card class="large-nav-dropdown" elevation="8">
             <v-container fluid class="pa-4">
               <v-row>
+                <!-- Hanya tampilkan section yang memiliki item yang boleh dilihat -->
                 <v-col
-                  v-for="section in menu.sections ?? []"
+                  v-for="section in (menu.sections ?? []).filter((sec) =>
+                    sec.items.some((i) => canView(i.menuId)),
+                  )"
                   :key="section.title"
-                  :cols="12 / ((menu.sections ?? []).length || 1)"
+                  cols="12"
+                  md="6"
                   class="section-col"
                 >
                   <div class="section-header">
@@ -384,56 +385,19 @@ onUnmounted(() => {
                   </div>
 
                   <v-list density="compact" class="section-list">
-                    <template
-                      v-for="item in section.items.filter(
-                        (i) => !i.to || hasAccess(i.to),
+                    <!-- Filter item di dalam section -->
+                    <v-list-item
+                      v-for="item in section.items.filter((i) =>
+                        canView(i.menuId),
                       )"
                       :key="item.title"
+                      :to="item.to"
+                      :prepend-icon="item.icon"
+                      class="section-list-item"
+                      @click="closeMenus"
                     >
-                      <!-- Section Sub Items -->
-                      <v-list-group
-                        v-if="item.subItems"
-                        :value="item.title"
-                        class="section-list-group"
-                      >
-                        <template #activator="{ props }">
-                          <v-list-item
-                            v-bind="props"
-                            :prepend-icon="item.icon"
-                            :title="item.title"
-                            class="section-list-item"
-                          />
-                        </template>
-                        <template
-                          v-for="subItem in item.subItems.filter((si) =>
-                            hasAccess(si.to),
-                          )"
-                          :key="subItem.title"
-                        >
-                          <v-list-item
-                            :to="subItem.to"
-                            :prepend-icon="subItem.icon"
-                            class="section-list-item sub"
-                            @click="closeMenus"
-                          >
-                            <v-list-item-title>{{
-                              subItem.title
-                            }}</v-list-item-title>
-                          </v-list-item>
-                        </template>
-                      </v-list-group>
-
-                      <!-- Regular Section Item -->
-                      <v-list-item
-                        v-else
-                        :to="item.to"
-                        :prepend-icon="item.icon"
-                        class="section-list-item"
-                        @click="closeMenus"
-                      >
-                        <v-list-item-title>{{ item.title }}</v-list-item-title>
-                      </v-list-item>
-                    </template>
+                      <v-list-item-title>{{ item.title }}</v-list-item-title>
+                    </v-list-item>
                   </v-list>
                 </v-col>
               </v-row>
@@ -445,25 +409,20 @@ onUnmounted(() => {
 
     <v-spacer />
 
-    <!-- User Menu -->
-    <v-menu
-      v-model="userMenu"
-      offset-y
-      transition="fade-transition"
-      class="user-menu"
-    >
+    <!-- User Menu (Tetap sama karena Dashboard/Profile biasanya tanpa menuId) -->
+    <v-menu v-model="userMenu" offset-y transition="fade-transition">
       <template #activator="{ props }">
         <v-btn variant="text" v-bind="props" class="user-button">
           <v-avatar color="primary" size="28" class="user-avatar">
             <span class="user-initial">{{ authStore.userInitial }}</span>
           </v-avatar>
           <span class="user-name">{{ authStore.userName }}</span>
-          <v-icon icon="mdi-chevron-down" size="16" class="user-chevron" />
+          <v-icon icon="mdi-chevron-down" size="16" />
         </v-btn>
       </template>
 
-      <v-card class="user-dropdown" elevation="8">
-        <v-list class="user-list">
+      <v-card class="user-dropdown" elevation="8" min-width="200">
+        <v-list>
           <v-list-item class="user-profile-item">
             <template #prepend>
               <v-avatar color="primary" size="32">
@@ -475,31 +434,23 @@ onUnmounted(() => {
             <v-list-item-title class="user-profile-name">{{
               authStore.userName
             }}</v-list-item-title>
-            <v-list-item-subtitle class="user-profile-branch">{{
-              authStore.userCabang
+            <v-list-item-subtitle>{{
+              authStore.userCabangNama
             }}</v-list-item-subtitle>
           </v-list-item>
-
-          <v-divider class="user-divider" />
-
-          <!-- Hapus Tautkan WhatsApp, hanya sisakan Ganti Password -->
+          <v-divider />
           <v-list-item
             @click="openPasswordDialog"
             prepend-icon="mdi-lock-outline"
-            class="user-menu-item"
-          >
-            <v-list-item-title>Ganti Password</v-list-item-title>
-          </v-list-item>
-
-          <v-divider class="user-divider" />
-
+            title="Ganti Password"
+          />
+          <v-divider />
           <v-list-item
             @click="handleLogout"
             prepend-icon="mdi-logout"
-            class="user-menu-item logout"
-          >
-            <v-list-item-title>Logout</v-list-item-title>
-          </v-list-item>
+            title="Logout"
+            class="text-error"
+          />
         </v-list>
       </v-card>
     </v-menu>
