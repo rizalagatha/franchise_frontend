@@ -334,7 +334,13 @@ onMounted(() => {
 
     <template #right-column>
       <div
-        class="desktop-form-section pa-0 overflow-hidden fill-height elevation-1"
+        class="desktop-form-section pa-0 d-flex flex-column elevation-1"
+        style="
+          flex-grow: 1;
+          min-height: 0;
+          margin-bottom: 0 !important;
+          overflow: hidden;
+        "
       >
         <v-data-table
           :headers="tableHeaders"
@@ -416,5 +422,17 @@ onMounted(() => {
 :deep(input::-webkit-inner-spin-button) {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* Trik Flexbox agar v-table__wrapper mau memunculkan scrollbar vertikal */
+.desktop-table {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.desktop-table :deep(.v-table__wrapper) {
+  flex: 1 1 auto;
+  overflow-y: auto !important;
 }
 </style>

@@ -151,16 +151,21 @@ const emit = defineEmits([
   grid-template-columns: 320px 1fr;
   gap: 16px;
 }
-.left-column,
+.left-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto; /* <-- Tambahkan ini agar form kiri bisa di-scroll */
+  padding-right: 4px; /* Memberi sedikit jarak agar scrollbar tidak menempel */
+}
+
 .right-column {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-.right-column {
   flex-grow: 1;
+  /* Kolom kanan JANGAN diberi overflow, biarkan scrollbar tabel yang bekerja */
 }
-
 :deep(.desktop-form-section) {
   padding: 16px;
   border: 1px solid #e0e0e0;
