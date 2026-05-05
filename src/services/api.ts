@@ -38,19 +38,31 @@ api.interceptors.request.use(
 );
 
 // Versi baru yang lebih "pintar"
+// Versi baru yang lebih "pintar"
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const authStore = useAuthStore();
-    if (error.response && error.response.status === 401) {
-      // --- PERBAIKAN DI SINI ---
+
+    // Cek error 401 (Unauthorized) ATAU 403 (Forbidden / Cabang Tidak Valid)
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403)
+    ) {
+      // Jika errornya dari cabang tidak valid, beri notifikasi (bisa lewat store atau console)
+      if (
+        error.response.data?.message?.includes("Informasi cabang tidak valid")
+      ) {
+        console.error(
+          "Sesi ditolak: Konfigurasi Database Cabang tidak valid atau berubah.",
+        );
+      }
+
       // Cek apakah URL yang error BUKAN URL validasi PIN
       if (!error.config.url.includes("/auth-pin/validate")) {
         // Jika BUKAN dari validasi PIN, baru anggap sesi habis
         authStore.isSessionExpired = true;
       }
-      // Jika INI ADALAH URL validasi PIN, kita tidak melakukan apa-apa di sini,
-      // kita biarkan komponen (SoCreateView) yang menanganinya di blok `catch`.
     }
     return Promise.reject(error);
   },
