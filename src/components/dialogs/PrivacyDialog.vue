@@ -17,7 +17,7 @@ const isOpen = computed({
       <v-card-title
         class="d-flex align-center pa-6 border-b bg-white header-area"
       >
-        <div class="d-flex align-center gap-3">
+        <div class="d-flex align-center" style="gap: 14px">
           <div class="icon-badge">
             <v-icon color="white" size="18">mdi-shield-check-outline</v-icon>
           </div>

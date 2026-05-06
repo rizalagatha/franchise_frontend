@@ -11,6 +11,7 @@ interface User {
   cabangNama: string;
   canApproveCorrection?: boolean;
   canApprovePrice?: boolean;
+  terms_accepted?: number;
 }
 
 interface Permission {
@@ -54,6 +55,7 @@ export const useAuthStore = defineStore("auth", () => {
   const userInitial = computed(() => userName.value.charAt(0).toUpperCase());
   const userCabang = computed(() => user.value?.cabang || "-");
   const userCabangNama = computed(() => user.value?.cabangNama || "");
+  const termsAccepted = computed(() => user.value?.terms_accepted === 1);
   const allowedMenus = computed(() => {
     // Pastikan memfilter hak_men_view yang bernilai 'Y'
     // dan memetakan ke hak_men_id
@@ -117,6 +119,13 @@ export const useAuthStore = defineStore("auth", () => {
     );
 
     router.push("/");
+  }
+
+  function setTermsAccepted() {
+    if (user.value) {
+      user.value.terms_accepted = 1;
+      localStorage.setItem("userData", JSON.stringify(user.value));
+    }
   }
 
   // Aksi untuk logout
@@ -188,8 +197,10 @@ export const useAuthStore = defineStore("auth", () => {
     userInitial,
     userCabang,
     userCabangNama,
+    termsAccepted,
     isTokenExpired,
     setLoginData,
+    setTermsAccepted,
     logout,
     checkAuthStatus,
     can,
