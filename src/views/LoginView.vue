@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import api from "@/services/api";
 import { useAuthStore } from "@/stores/authStore";
 import { useToast } from "vue-toastification";
@@ -7,6 +7,8 @@ import { useRouter } from "vue-router";
 import { AxiosError } from "axios";
 import logoUrl from "@/assets/logo.png";
 import bgImage from "@/assets/login-bg.jpg";
+import tokopediaUrl from "@/assets/tokopedia.png";
+import shopeeUrl from "@/assets/shopee.png";
 
 import TermsDialog from "@/components/dialogs/TermsDialog.vue";
 import PrivacyDialog from "@/components/dialogs/PrivacyDialog.vue";
@@ -21,15 +23,36 @@ const isLoading = ref(false);
 const showPassword = ref(false);
 const rememberMe = ref(false);
 
+// Mengecek apakah sebelumnya user pernah mencentang "Ingat Saya"
+onMounted(() => {
+  const savedUser = localStorage.getItem("rememberedUser");
+  if (savedUser) {
+    kodeUser.value = savedUser;
+    rememberMe.value = true;
+  }
+});
+
 // State untuk Dialog ToS dan Privacy Policy
 const showToS = ref(false);
 const showPrivacy = ref(false);
+
+const openLink = (url: string) => {
+  window.open(url, "_blank");
+};
 
 const handleLogin = async () => {
   if (!kodeUser.value || !password.value) {
     toast.error("User dan Password harus diisi.");
     return;
   }
+
+  // LOGIKA INGAT SAYA: Simpan atau Hapus dari localStorage
+  if (rememberMe.value) {
+    localStorage.setItem("rememberedUser", kodeUser.value);
+  } else {
+    localStorage.removeItem("rememberedUser");
+  }
+
   isLoading.value = true;
   try {
     const response = await api.post("/auth/login", {
@@ -66,7 +89,12 @@ const handleLogin = async () => {
         class="d-none d-md-flex flex-column justify-center px-16 text-white"
       >
         <div class="welcome-content">
-          <v-avatar size="80" color="white" class="mb-6 elevation-10">
+          <v-avatar
+            size="80"
+            color="white"
+            class="mb-6 elevation-10 cursor-pointer hover-scale"
+            @click="openLink('https://www.kaosanofficial.com')"
+          >
             <v-img :src="logoUrl" alt="Company Logo" />
           </v-avatar>
           <h1 class="welcome-title font-weight-black mb-4">
@@ -76,19 +104,43 @@ const handleLogin = async () => {
             Kelola bisnis franchise Anda dengan lebih mudah,<br />
             cepat, dan terintegrasi dalam satu sistem cerdas.
           </p>
-          <div class="d-flex social-icons">
-            <v-icon size="28" class="mr-6 cursor-pointer hover-scale"
+          <div class="d-flex social-icons align-center">
+            <v-icon
+              size="28"
+              class="mr-6 cursor-pointer hover-scale"
+              @click="
+                openLink(
+                  'https://www.facebook.com/kaosanofficiall/?locale=id_ID',
+                )
+              "
               >mdi-facebook</v-icon
             >
-            <v-icon size="28" class="mr-6 cursor-pointer hover-scale"
-              >mdi-twitter</v-icon
-            >
-            <v-icon size="28" class="mr-6 cursor-pointer hover-scale"
+
+            <v-icon
+              size="28"
+              class="mr-6 cursor-pointer hover-scale"
+              @click="openLink('https://www.instagram.com/kaosan.official/')"
               >mdi-instagram</v-icon
             >
-            <v-icon size="28" class="cursor-pointer hover-scale"
-              >mdi-youtube</v-icon
-            >
+
+            <!-- Ganti pakai v-img dengan flex-grow-0 agar lebarnya konsisten 28px -->
+            <v-img
+              :src="tokopediaUrl"
+              width="28"
+              height="28"
+              class="mr-6 cursor-pointer hover-scale flex-grow-0"
+              @click="openLink('https://www.tokopedia.com/kaosanofficial-118')"
+              title="Tokopedia"
+            ></v-img>
+
+            <v-img
+              :src="shopeeUrl"
+              width="28"
+              height="28"
+              class="cursor-pointer hover-scale flex-grow-0"
+              @click="openLink('https://shopee.co.id/kaosan_official')"
+              title="Shopee"
+            ></v-img>
           </div>
         </div>
       </v-col>
