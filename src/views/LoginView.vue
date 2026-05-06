@@ -8,6 +8,9 @@ import { AxiosError } from "axios";
 import logoUrl from "@/assets/logo.png";
 import bgImage from "@/assets/login-bg.jpg";
 
+import TermsDialog from "@/components/dialogs/TermsDialog.vue";
+import PrivacyDialog from "@/components/dialogs/PrivacyDialog.vue";
+
 const toast = useToast();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -202,155 +205,8 @@ const handleLogin = async () => {
       </v-col>
     </v-row>
 
-    <!-- Dialog Syarat dan Ketentuan -->
-    <v-dialog v-model="showToS" max-width="700" scrollable>
-      <v-card>
-        <v-card-title class="bg-primary text-white font-weight-bold py-4">
-          Syarat dan Ketentuan Penggunaan Sistem
-        </v-card-title>
-        <v-divider></v-divider>
-        <v-card-text class="pa-6" style="max-height: 60vh">
-          <div class="text-body-2 text-justify">
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              1. Penerimaan Syarat
-            </h3>
-            <p class="mb-4">
-              Dengan mengakses dan menggunakan sistem manajemen waralaba
-              (Franchise Management System) ini, Anda selaku Pengguna (baik
-              Admin Pusat maupun Admin Cabang) setuju untuk terikat dengan
-              Syarat dan Ketentuan ini. Jika Anda tidak setuju, Anda tidak
-              diperkenankan menggunakan sistem ini.
-            </p>
-
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              2. Pengelolaan Akun dan Hak Akses
-            </h3>
-            <p class="mb-4">
-              Admin Cabang diberikan wewenang untuk mengelola pengguna (Master
-              User) di lingkungan cabangnya sendiri secara mandiri. Admin Cabang
-              bertanggung jawab penuh atas pembuatan, pembatasan hak akses, dan
-              aktivitas operasional yang dilakukan oleh staf (Sales Counter,
-              Kasir, dll) di bawah naungan cabangnya.
-            </p>
-
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              3. Keamanan Kredensial
-            </h3>
-            <p class="mb-4">
-              Anda bertanggung jawab penuh untuk menjaga kerahasiaan *User ID*
-              dan *Kata Sandi* Anda. Meskipun sistem kami telah mengenkripsi
-              kata sandi menggunakan standar keamanan tinggi, segala aktivitas
-              transaksi yang terjadi menggunakan akun Anda akan dianggap sebagai
-              tindakan sah dari Anda.
-            </p>
-
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              4. Kepatuhan Infrastruktur dan Jaringan
-            </h3>
-            <p class="mb-4">
-              Sistem ini dirancang dengan arsitektur jaringan internal yang
-              tertutup. Pengguna dilarang keras mencoba melakukan *bypass*,
-              pemindaian (*scanning*), atau upaya akses langsung ke gerbang
-              pangkalan data (*database port*) dari luar aplikasi antarmuka yang
-              telah disediakan. Akses manajemen data tingkat lanjut hanya
-              diperbolehkan melalui jalur aman (seperti *SSH Tunneling*) yang
-              disetujui oleh Pusat.
-            </p>
-
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              5. Penghentian Akses
-            </h3>
-            <p>
-              Pihak Pusat berhak untuk menangguhkan atau menghentikan hak akses
-              cabang atau pengguna tertentu secara sepihak apabila ditemukan
-              adanya aktivitas mencurigakan, pelanggaran keamanan, atau
-              penyalahgunaan wewenang yang merugikan integritas sistem.
-            </p>
-          </div>
-        </v-card-text>
-        <v-divider></v-divider>
-        <v-card-actions class="pa-4 bg-grey-lighten-4">
-          <v-spacer></v-spacer>
-          <v-btn color="primary" variant="flat" @click="showToS = false"
-            >Saya Mengerti</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Dialog Kebijakan Privasi -->
-    <v-dialog v-model="showPrivacy" max-width="700" scrollable>
-      <v-card>
-        <v-card-title
-          class="bg-orange-darken-4 text-white font-weight-bold py-4"
-        >
-          Kebijakan Privasi dan Keamanan Data
-        </v-card-title>
-        <v-divider></v-divider>
-        <v-card-text class="pa-6" style="max-height: 60vh">
-          <div class="text-body-2 text-justify">
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              1. Isolasi Data Cabang (Multi-Tenant Architecture)
-            </h3>
-            <p class="mb-4">
-              Kami menjunjung tinggi kerahasiaan data bisnis Anda. Sistem ini
-              beroperasi menggunakan arsitektur pangkalan data terdistribusi
-              (*Dynamic Pooling*). Artinya, seluruh data transaksi, pelanggan,
-              dan inventaris masing-masing cabang disimpan secara terpisah dalam
-              ruang lingkup database yang diisolasi. Personel dari Cabang A
-              tidak akan pernah memiliki kemampuan teknis maupun izin untuk
-              mengakses, melihat, atau memanipulasi data operasional dari Cabang
-              B.
-            </p>
-
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              2. Proteksi Infrastruktur Server
-            </h3>
-            <p class="mb-4">
-              Keamanan pangkalan data kami dilindungi oleh lapisan *firewall*
-              yang ketat. Pangkalan data dikonfigurasi secara mutlak untuk
-              menolak segala bentuk koneksi langsung dari jaringan publik (hanya
-              menerima akses dari lalu lintas internal atau *localhost*).
-              Langkah ini diterapkan guna memastikan bahwa ancaman eksternal
-              seperti serangan otomatis (*scanning bot*) atau intrusi siber
-              tidak dapat menyentuh data cabang Anda.
-            </p>
-
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              3. Enkripsi Kredensial
-            </h3>
-            <p class="mb-4">
-              Data autentikasi pengguna dan hak akses diverifikasi secara
-              terpusat. Setiap kata sandi yang Anda buat akan langsung
-              dienkripsi menggunakan algoritma *hashing* kriptografis (*Bcrypt*)
-              sebelum disimpan. Tim pengembang maupun sistem administrator kami
-              tidak dapat melihat atau mendekripsi kata sandi asli Anda.
-            </p>
-
-            <h3 class="text-subtitle-1 font-weight-bold mb-2">
-              4. Penggunaan Data dan Token Keamanan
-            </h3>
-            <p class="mb-4">
-              Sesi *login* Anda dijamin menggunakan *JSON Web Token* (JWT).
-              Token ini memastikan bahwa setiap instruksi yang Anda kirimkan
-              (seperti melihat stok atau membuat tagihan) selalu divalidasi dan
-              secara otomatis diarahkan ke pangkalan data cabang Anda secara
-              presisi, tanpa memerlukan pertukaran kredensial berulang kali.
-            </p>
-          </div>
-        </v-card-text>
-        <v-divider></v-divider>
-        <v-card-actions class="pa-4 bg-grey-lighten-4">
-          <v-spacer></v-spacer>
-          <v-btn
-            color="orange-darken-4"
-            variant="flat"
-            @click="showPrivacy = false"
-            >Tutup</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <TermsDialog v-model="showToS" />
+    <PrivacyDialog v-model="showPrivacy" />
   </div>
 </template>
 
