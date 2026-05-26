@@ -19,8 +19,8 @@ const MENU_ID = "52";
 // --- State ---
 const filterStartDate = ref(format(subDays(new Date(), 30), "yyyy-MM-dd"));
 const filterEndDate = ref(format(new Date(), "yyyy-MM-dd"));
-const filterCabang = ref(authStore.user?.cabang || "F03");
-const namaCabang = ref(authStore.user?.cabangNama || "KAOSAN.OFFICIAL");
+const filterCabang = ref(authStore.userCabangKode || "");
+const namaCabang = ref(authStore.userCabangNama || "");
 const showCabangModal = ref(false);
 const baseBrowseRef = ref<any>(null);
 
