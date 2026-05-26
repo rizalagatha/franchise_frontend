@@ -92,7 +92,7 @@ const fetchCustomer = async () => {
 };
 
 const fetchUnpaidInvoices = async () => {
-  if (!formHeader.value.sh_cus_kode || isEditMode.value) return;
+  if (!formHeader.value.sh_cus_kode) return;
   try {
     const res = await api.get(
       `/setoran-pembayaran/unpaid/${formHeader.value.sh_cus_kode}`,
@@ -118,6 +118,8 @@ const fetchEditData = async () => {
   isLoading.value = true;
   try {
     const res = await api.get(`/setoran-pembayaran/${params.nomor}/form-data`);
+
+    // 1. Set Header
     formHeader.value = {
       ...res.data.header,
       sh_nominal: Math.round(Number(res.data.header.sh_nominal)),
@@ -126,14 +128,20 @@ const fetchEditData = async () => {
         ? format(new Date(res.data.header.sh_tgltransfer), "yyyy-MM-dd")
         : "",
     };
-    items.value = res.data.details.map((d: any) => ({
-      ...d,
-      nominal: Math.round(Number(d.nominal)),
-      terbayar: Math.round(Number(d.terbayar)),
-      sisa_piutang: Math.round(Number(d.sisa_piutang)),
-      bayar: Math.round(Number(d.bayar)),
-      lunasi: false,
-    }));
+
+    // 2. Ambil semua invoice customer tersebut terlebih dahulu
+    await fetchUnpaidInvoices();
+
+    // 3. Gabungkan data yang sudah dibayar (dari edit) dengan daftar invoice
+    // agar baris-baris invoice yang sudah terbayar di setoran ini muncul
+    res.data.details.forEach((d: any) => {
+      const existingIdx = items.value.findIndex((i) => i.invoice === d.invoice);
+      if (existingIdx > -1) {
+        items.value[existingIdx] = { ...items.value[existingIdx], ...d };
+      } else {
+        items.value.push(d); // Jika invoice sudah tidak ada di piutang, tambahkan manual
+      }
+    });
   } catch (error) {
     toast.error("Gagal memuat data edit.");
     goBack();
