@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import api from "@/services/api";
 import { useToast } from "vue-toastification";
 import { format } from "date-fns";
@@ -16,6 +16,7 @@ import KasirPrintPreviewModal from "@/components/KasirPrintPreviewModal.vue";
 import { useForm } from "@/composables/useForm";
 
 const router = useRouter();
+const route = useRoute();
 const toast = useToast();
 const MENU_ID = "31";
 
@@ -201,6 +202,57 @@ const onItemSelected = (selectedItem: any) => {
   }
 };
 
+const loadEditData = async () => {
+  try {
+    isLoading.value = true;
+
+    const nomor = route.params.nomor;
+
+    if (!nomor) return;
+
+    const response = await api.get(`/kasir/form/${nomor}`);
+    const data = response.data;
+
+    formHeader.value = {
+      nomor: data.header.Inv_nomor,
+      tanggal: data.header.Inv_tanggal,
+      kdCus: data.header.Inv_cus_kode,
+      namaCus: data.header.cus_nama || "",
+      diskonGlobal: data.header.inv_disc || 0,
+      biayaKirim: data.header.inv_bkrm || 0,
+      rpTunai: data.header.inv_rptunai || 0,
+      rpCard: data.header.inv_rpcard || 0,
+      noRek: data.header.inv_norek || "",
+      namaBank: "",
+      pundiAmal: data.header.inv_pundiamal || 0,
+      kembalian: data.header.inv_kembalian || 0,
+      keterangan: data.header.keterangan || "",
+    };
+
+    items.value = data.items.map((item: any, index: number) => ({
+      id: index + 1,
+      kode: item.kode,
+      barcode: item.barcode,
+      nama: item.nama,
+      ukuran: item.ukuran,
+      stok: item.stok || 0,
+      jumlah: item.jumlah,
+      harga: item.harga,
+      hpp: item.hpp || 0,
+      diskon: item.diskon || 0,
+      total: item.total || 0,
+    }));
+
+    nextItemId.value = items.value.length + 1;
+  } catch (error: any) {
+    toast.error(error.response?.data?.message || "Gagal memuat data invoice.");
+
+    goBack();
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 // --- 6. Save & Payment Logic ---
 const openPayment = () => {
   if (items.value.length === 0) return toast.error("Barang masih kosong!");
@@ -297,9 +349,14 @@ const onPrintModalClosed = () => {
 };
 
 // --- 7. Lifecycle ---
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener("keydown", handleGlobalKeyDown);
-  isLoading.value = false; // Karena kasir biasa form baru
+
+  if (isEditMode.value) {
+    await loadEditData();
+  } else {
+    isLoading.value = false;
+  }
 });
 onUnmounted(() => window.removeEventListener("keydown", handleGlobalKeyDown));
 </script>
