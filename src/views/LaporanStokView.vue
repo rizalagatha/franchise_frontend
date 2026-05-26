@@ -17,8 +17,8 @@ const MENU_ID = "51";
 
 // 1. Filter State (Specific for Laporan)
 const filterTanggal = ref(format(new Date(), "yyyy-MM-dd"));
-const filterCabang = ref(authStore.userCabangKode || "BYL");
-const namaCabang = ref("KAOSAN.OFFICIAL");
+const filterCabang = ref(authStore.userCabangKode || "");
+const namaCabang = ref(authStore.userCabangNama || "");
 const tampilKosong = ref(false);
 const showCabangModal = ref(false);
 const baseBrowseRef = ref<any>(null); // Akses search BaseBrowse
