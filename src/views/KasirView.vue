@@ -57,6 +57,9 @@ const isKasirPreviewVisible = ref(false);
 const isA4PreviewVisible = ref(false);
 const selectedInvoicePrint = ref<string | null>(null);
 
+const showDeleteDialog = ref(false);
+const deletingItem = ref<any>(null);
+
 // 3. Formatters
 const formatCurrency = (value: any) => formatRupiah(value);
 const formatNumberLocal = (value: number | null | undefined): string => {
@@ -177,23 +180,25 @@ const openPrintOptions = (nomor: string) => {
   isPrintOptionVisible.value = true;
 };
 
-const deleteInvoice = async (item: any) => {
-  if (!item?.Nomor) {
-    return toast.error("Pilih invoice terlebih dahulu.");
+const confirmDelete = (item: any) => {
+  deletingItem.value = item;
+  showDeleteDialog.value = true;
+};
+
+const executeDelete = async () => {
+  if (!deletingItem.value?.Nomor) {
+    return toast.error("Data invoice tidak valid.");
   }
-
-  const confirmed = window.confirm(
-    `Yakin ingin menghapus invoice ${item.Nomor}?`,
-  );
-
-  if (!confirmed) return;
 
   try {
     isLoading.value = true;
 
-    const response = await api.delete(`/kasir/${item.Nomor}`);
+    const response = await api.delete(`/kasir/${deletingItem.value.Nomor}`);
 
     toast.success(response.data?.message || "Invoice berhasil dihapus.");
+
+    showDeleteDialog.value = false;
+    deletingItem.value = null;
 
     fetchData();
   } catch (error: any) {
@@ -251,7 +256,7 @@ const exportHeader = () => {
     @refresh="fetchData"
     @add="openNewForm"
     @edit="openEditForm"
-    @delete="deleteInvoice"
+    @delete="confirmDelete"
   >
     <template #filter-right-prepend>
       <v-text-field
@@ -423,6 +428,43 @@ const exportHeader = () => {
     v-model="isA4PreviewVisible"
     :nomorInvoice="selectedInvoicePrint"
   />
+
+  <v-dialog v-model="showDeleteDialog" max-width="420px" persistent>
+    <v-card class="rounded-lg">
+      <v-card-title class="bg-error text-white d-flex align-center">
+        <v-icon class="mr-2" color="white"> mdi-delete-alert </v-icon>
+
+        Konfirmasi Hapus
+      </v-card-title>
+
+      <v-card-text class="pa-5">
+        <div class="text-body-1">Yakin ingin menghapus invoice:</div>
+
+        <div class="font-weight-bold text-error mt-2">
+          {{ deletingItem?.Nomor }}
+        </div>
+
+        <div class="text-caption text-grey mt-3">
+          Data yang sudah dihapus tidak dapat dikembalikan.
+        </div>
+      </v-card-text>
+
+      <v-card-actions class="pa-4">
+        <v-spacer />
+
+        <v-btn variant="text" @click="showDeleteDialog = false"> Batal </v-btn>
+
+        <v-btn
+          color="error"
+          variant="elevated"
+          :loading="isLoading"
+          @click="executeDelete"
+        >
+          Ya, Hapus
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
