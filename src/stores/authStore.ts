@@ -8,6 +8,7 @@ interface User {
   kode: string;
   nama: string;
   cabang: string;
+  cabangKode?: string;
   cabangNama: string;
   canApproveCorrection?: boolean;
   canApprovePrice?: boolean;
@@ -54,6 +55,7 @@ export const useAuthStore = defineStore("auth", () => {
   const userName = computed(() => user.value?.nama || "User");
   const userInitial = computed(() => userName.value.charAt(0).toUpperCase());
   const userCabang = computed(() => user.value?.cabang || "-");
+  const userCabangKode = computed(() => user.value?.cabangKode || "");
   const userCabangNama = computed(() => user.value?.cabangNama || "");
   const termsAccepted = computed(() => user.value?.terms_accepted === 1);
   const allowedMenus = computed(() => {
@@ -196,6 +198,7 @@ export const useAuthStore = defineStore("auth", () => {
     userName,
     userInitial,
     userCabang,
+    userCabangKode,
     userCabangNama,
     termsAccepted,
     isTokenExpired,
