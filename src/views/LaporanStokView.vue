@@ -3,7 +3,7 @@ import { ref, computed, watch } from "vue";
 import { format } from "date-fns";
 import api from "@/services/api";
 import { useToast } from "vue-toastification";
-import { useAuthStore } from "@/stores/authStore";
+// import { useAuthStore } from "@/stores/authStore";
 import * as XLSX from "xlsx";
 
 // Components & Composables
@@ -12,13 +12,13 @@ import CabangSearchModal from "@/components/lookup/CabangSearchModal.vue";
 import { useBrowse } from "@/composables/useBrowse";
 
 const toast = useToast();
-const authStore = useAuthStore();
+// const authStore = useAuthStore();
 const MENU_ID = "51";
 
 // 1. Filter State (Specific for Laporan)
 const filterTanggal = ref(format(new Date(), "yyyy-MM-dd"));
-const filterCabang = ref(authStore.user?.cabang || "F03");
-const namaCabang = ref(authStore.user?.cabangNama || "KAOSAN.OFFICIAL");
+const filterCabang = ref("F03");
+const namaCabang = ref("KAOSAN.OFFICIAL");
 const tampilKosong = ref(false);
 const showCabangModal = ref(false);
 const baseBrowseRef = ref<any>(null); // Akses search BaseBrowse
