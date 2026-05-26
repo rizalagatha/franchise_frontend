@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import api from '@/services/api';
-import { format, parseISO } from 'date-fns';
-import Logo from '@/assets/logo.png';
-import InstagramLogo from '@/assets/instagram.jpg';
-import FacebookLogo from '@/assets/facebook.jpg';
+import { ref, onMounted, nextTick } from "vue";
+import { useRoute } from "vue-router";
+import api from "@/services/api";
+import { format, parseISO } from "date-fns";
+import Logo from "@/assets/logo.png";
+import InstagramLogo from "@/assets/instagram.jpg";
+import FacebookLogo from "@/assets/facebook.jpg";
 import { formatRupiah } from "@/utils/formatRupiah";
 import QRCode from "qrcode";
-import { useToast } from 'vue-toastification';
+import { useToast } from "vue-toastification";
 
 const route = useRoute();
 const toast = useToast();
@@ -49,13 +49,14 @@ const fetchPrintData = async (nomor: string) => {
     setTimeout(() => {
       window.print();
     }, 1500);
-
   } catch (error: any) {
     console.error("Error Detail:", error);
     toast.error("Gagal memuat data cetak.");
   } finally {
     // JANGAN langsung set isLoading = false, biarkan overlay hilang setelah dialog print muncul
-    setTimeout(() => { isLoading.value = false; }, 2000);
+    setTimeout(() => {
+      isLoading.value = false;
+    }, 2000);
   }
 };
 
@@ -71,7 +72,11 @@ onMounted(() => {
     <div v-if="printData" class="page">
       <div class="header">
         <div class="header-left">
-          <img src="@/assets/logo.png" class="logo" @load="console.log('Logo loaded')" />
+          <img
+            src="@/assets/logo.png"
+            class="logo"
+            @load="console.log('Logo loaded')"
+          />
           <div class="company-info">
             <strong>{{ printData?.header?.perusahaanNama }}</strong>
             <div>{{ printData?.header?.perusahaanAlamat }}</div>
@@ -85,8 +90,12 @@ onMounted(() => {
 
       <div class="info-grid">
         <div class="info-column">
-          <div><span class="label">Nomor</span>: {{ printData.header.nomor }}</div>
-          <div><span class="label">Tanggal</span>: {{ printData.header.tanggal }}</div>
+          <div>
+            <span class="label">Nomor</span>: {{ printData.header.nomor }}
+          </div>
+          <div>
+            <span class="label">Tanggal</span>: {{ printData.header.tanggal }}
+          </div>
         </div>
         <div class="info-column">
           <div class="d-flex">
@@ -125,21 +134,43 @@ onMounted(() => {
       </table>
 
       <div class="footer-grid">
-        <div class="terbilang"><strong>Terbilang:</strong> <em>{{ printData.terbilang }}</em></div>
+        <div class="terbilang">
+          <strong>Terbilang:</strong> <em>{{ printData.terbilang }}</em>
+        </div>
         <div class="summary">
-          <div class="summary-item"><span>Total :</span> <span>{{ formatRupiah(printData.summary.total) }}</span></div>
-          <div class="summary-item"><span>Netto :</span> <span>{{ formatRupiah(printData.summary.netto) }}</span></div>
-          <div class="summary-item grand-total"><span>Grand Total :</span> <span>{{
-            formatRupiah(printData.summary.grandTotal) }}</span></div>
-          <div class="summary-item"><span>Bayar :</span> <span>{{ formatRupiah(printData.summary.bayar) }}</span></div>
-          <div class="summary-item"><span>Sisa :</span> <span>{{ formatRupiah(printData.summary.kembali) }}</span></div>
+          <div class="summary-item">
+            <span>Total :</span>
+            <span>{{ formatRupiah(printData.summary.total) }}</span>
+          </div>
+          <div class="summary-item">
+            <span>Netto :</span>
+            <span>{{ formatRupiah(printData.summary.netto) }}</span>
+          </div>
+          <div class="summary-item grand-total">
+            <span>Grand Total :</span>
+            <span>{{ formatRupiah(printData.summary.grandTotal) }}</span>
+          </div>
+          <div class="summary-item">
+            <span>Bayar :</span>
+            <span>{{ formatRupiah(printData.summary.bayar) }}</span>
+          </div>
+          <div class="summary-item">
+            <span>Sisa :</span>
+            <span>{{ formatRupiah(printData.summary.kembali) }}</span>
+          </div>
         </div>
       </div>
 
       <div class="signatures">
-        <div class="sig-box">Dibuat Oleh,<br><br><br>( {{ printData.header.userNama }} )</div>
-        <div class="sig-box">Mengetahui,<br><br><br>( .................... )</div>
-        <div class="sig-box">Customer,<br><br><br>( .................... )</div>
+        <div class="sig-box">
+          Dibuat Oleh,<br /><br /><br />( {{ printData.header.userNama }} )
+        </div>
+        <div class="sig-box">
+          Mengetahui,<br /><br /><br />( .................... )
+        </div>
+        <div class="sig-box">
+          Customer,<br /><br /><br />( .................... )
+        </div>
       </div>
     </div>
   </div>
@@ -245,7 +276,6 @@ onMounted(() => {
 
 <style>
 @media print {
-
   html,
   body {
     display: block !important;
@@ -275,6 +305,5 @@ onMounted(() => {
     visibility: visible !important;
     opacity: 1 !important;
   }
-
 }
 </style>

@@ -173,12 +173,16 @@ const onScanBarcode = async () => {
 };
 
 const onItemSelected = (selectedItem: any) => {
+  // PERBAIKAN: Wajib mengecek kode DAN ukuran agar size berbeda menjadi baris baru
   const existing = items.value.find(
-    (i) => i.barcode === selectedItem.barcode || i.kode === selectedItem.kode,
+    (i) => i.kode === selectedItem.kode && i.ukuran === selectedItem.ukuran,
   );
+
   if (existing) {
     existing.jumlah = (existing.jumlah ?? 0) + 1;
-    toast.info(`Jumlah ${selectedItem.nama} ditambah.`);
+    toast.info(
+      `Jumlah ${selectedItem.nama} (${selectedItem.ukuran}) ditambah.`,
+    );
   } else {
     items.value.unshift({
       id: nextItemId.value++,
@@ -193,7 +197,7 @@ const onItemSelected = (selectedItem: any) => {
       diskon: 0,
       total: selectedItem.harga || selectedItem.hpp || 0,
     });
-    toast.success(`${selectedItem.nama} ditambahkan.`);
+    toast.success(`${selectedItem.nama} (${selectedItem.ukuran}) ditambahkan.`);
   }
 };
 
