@@ -177,6 +177,32 @@ const openPrintOptions = (nomor: string) => {
   isPrintOptionVisible.value = true;
 };
 
+const deleteInvoice = async (item: any) => {
+  if (!item?.Nomor) {
+    return toast.error("Pilih invoice terlebih dahulu.");
+  }
+
+  const confirmed = window.confirm(
+    `Yakin ingin menghapus invoice ${item.Nomor}?`,
+  );
+
+  if (!confirmed) return;
+
+  try {
+    isLoading.value = true;
+
+    const response = await api.delete(`/kasir/${item.Nomor}`);
+
+    toast.success(response.data?.message || "Invoice berhasil dihapus.");
+
+    fetchData();
+  } catch (error: any) {
+    toast.error(error.response?.data?.message || "Gagal menghapus invoice.");
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 const handlePrintSelection = (type: "a4" | "kasir" | "wa") => {
   if (!selectedInvoicePrint.value) return;
   if (type === "a4") {
@@ -225,7 +251,7 @@ const exportHeader = () => {
     @refresh="fetchData"
     @add="openNewForm"
     @edit="openEditForm"
-    @delete="() => {}"
+    @delete="deleteInvoice"
   >
     <template #filter-right-prepend>
       <v-text-field
